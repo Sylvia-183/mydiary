@@ -1,0 +1,2627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Diary</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+#syncOverlay{position:fixed;inset:0;z-index:2147483000;background:var(--paper,#E6E0D1);display:none;align-items:center;justify-content:center;padding:20px;box-sizing:border-box}
+#syncOverlay .card{width:100%;max-width:420px;background:#fff;border:1px solid #E8E3D7;border-radius:14px;padding:28px 26px;box-shadow:0 10px 40px rgba(0,0,0,.08);font-family:var(--sans,system-ui)}
+#syncOverlay h2{margin:0 0 6px;font-size:20px;font-weight:600;color:#1F1E1B}
+#syncOverlay .sub{font-size:13px;color:#6b665c;margin-bottom:18px;line-height:1.6}
+#syncOverlay label{display:block;font-size:13px;color:#555046;margin:12px 0 5px}
+#syncOverlay input{width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #d8d2c4;border-radius:8px;font-size:14px;background:#fbfaf6;color:#1F1E1B}
+#syncOverlay input:focus{outline:none;border-color:var(--accent,#6E7652)}
+#syncOverlay .btn{display:inline-block;margin-top:18px;padding:10px 18px;border:none;border-radius:8px;background:var(--accent,#6E7652);color:#fff;font-size:14px;cursor:pointer}
+#syncOverlay .btn.ghost{background:transparent;color:#6b665c;margin-top:8px;padding:8px 4px;font-size:13px}
+#syncOverlay .err{color:#c0554a;font-size:13px;margin-top:10px;min-height:18px}
+#syncOverlay .hint{font-size:12px;color:#9a948a;line-height:1.6;margin-top:14px}
+#syncOverlay .row{display:flex;gap:10px}
+#syncOverlay .row .btn{flex:1}
+#cloudBadge{position:fixed;top:12px;right:14px;z-index:2147483000;font-family:var(--sans,system-ui);font-size:12px;color:#6b665c;background:rgba(255,255,255,.85);border:1px solid #E8E3D7;border-radius:999px;padding:5px 10px;cursor:pointer;user-select:none;box-shadow:0 2px 8px rgba(0,0,0,.05);display:none;align-items:center;gap:6px}
+#cloudBadge .dot{width:7px;height:7px;border-radius:50%;background:#bbb}
+#cloudBadge.ok .dot{background:#5e9b66}
+#cloudBadge.err .dot{background:#c0554a}
+#cloudBadge.pending .dot{background:#d4a017}
+#cloudBadge .out{color:#9a948a;border-left:1px solid #E8E3D7;padding-left:6px;margin-left:2px}
+@media(max-width:600px){#cloudBadge{top:8px;right:8px}}
+</style>
+
+<style>/* =====================================================================
+   MUJI — quiet, simple, natural diary UI
+   Redesign: alignment-first, minimal hairlines, lots of breathing room.
+   Every id / class referenced by the page's JavaScript is preserved.
+   ===================================================================== */
+:root{
+  --paper:#E6E0D1;          /* desk / page background */
+  --paper-soft:#F1EDE1;
+  --card:#FFFFFF;           /* sheet */
+  --ink:#1F1E1B;            /* main text — near-black, high contrast */
+  --ink2:#555046;           /* secondary text */
+  --ink3:#A9A396;           /* faint text / hairlines */
+  --accent:#6E7652;         /* olive-sage, stronger */
+  --accent-deep:#4D5538;
+  --accent-tint:rgba(124,132,100,.10);
+  --clay:#9A725B;           /* clay, tiny touches only */
+  --line:#E8E3D7;
+  --line-soft:#F1EDE3;
+  --border:#C9C1B0;
+  --theme:#849A6E;          /* month theme (auto, set by JS) */
+  --theme-deep:#5F6B47;
+  --tab:#E4E9DA;           /* index-tab tint (overridden by month theme via JS) */
+  --tab-deep:#6C7947;      /* index-tab deep accent (overridden by month theme) */
+  --white:#FFFFFF;
+  --serif:Georgia,"Times New Roman","Songti SC","STSong","SimSun","Noto Serif SC",serif;
+  --sans:system-ui,-apple-system,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;overflow-y:scroll}
+body{
+  font-family:var(--sans);
+  background-color:var(--paper);
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.6' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 0.42 0 0 0 0 0.38 0 0 0 0 0.32 0 0 0 0.17 0'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>");
+  background-repeat:repeat;
+  color:var(--ink);
+  margin:0 auto;
+  padding:64px 20px 64px;
+  max-width:1120px;
+  line-height:1.75;
+  font-size:15px;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ---------- page sheet: flat, quiet, hairline frame ---------- */
+.page{
+  position:relative;
+  background-color:var(--card);
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 0.40 0 0 0 0 0.36 0 0 0 0 0.30 0 0 0 0.18 0'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>");
+  border:1px solid var(--line);
+  border-radius:2px;
+  box-shadow:0 1px 6px rgba(59,58,53,.07);
+  padding:40px 44px 44px;
+}
+.page::before{display:none}
+
+/* ---------- tabs: index-tab navigation (notebook divider tabs) ---------- */
+.book-tabs{
+  position:absolute;
+  top:0;
+  left:0;
+  right:0;
+  display:flex;
+  gap:3px;
+  align-items:flex-end;
+  transform:translateY(-100%);
+  z-index:6;
+  margin:0;
+  padding:0;
+}
+.book-tab{
+  position:relative;
+  flex:1 1 0;
+  text-align:center;
+  border:1px solid var(--tab-deep,var(--line));
+  border-bottom:none;
+  border-radius:7px 7px 0 0;
+  background:var(--tab,var(--card));
+  padding:8px 14px 10px;
+  font-size:12.5px;
+  letter-spacing:2px;
+  color:var(--ink2);
+  cursor:pointer;
+  font-family:var(--sans);
+  white-space:nowrap;
+  transition:transform .15s ease,color .15s ease,background .15s ease;
+}
+.book-tab:hover{color:var(--ink);transform:translateY(-2px)}
+.book-tab.active{
+  color:var(--ink);
+  font-weight:700;
+  background:var(--tab,var(--card));
+  border-color:var(--tab-deep,var(--accent));
+  border-top:3px solid var(--tab-deep,var(--accent));
+  transform:translateY(-6px);
+  box-shadow:0 2px 8px rgba(59,58,53,.10);
+}
+.book-tab.active::after{
+  content:"";
+  position:absolute;
+  left:-1px;right:-1px;
+  bottom:-6px;
+  height:6px;
+  background:var(--tab,var(--card));
+}
+.book-tab.active:hover{transform:translateY(-6px);color:var(--ink)}
+.book-tab.soon{opacity:.4;cursor:default}
+.book-tab.soon:hover{opacity:.4;color:var(--ink2);transform:none}
+
+/* index tabs now share ONE accent colour (the current month's theme) */
+
+/* ---------- toolbar: calm header band ---------- */
+.toolbar{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+  margin:0 0 30px;
+  padding:0 0 18px;
+  border-bottom:1px solid var(--line);
+}
+.toolbar .brand{
+  font-family:var(--serif);
+  font-weight:500;
+  font-size:16px;
+  letter-spacing:4px;
+  margin-right:auto;
+  white-space:nowrap;
+  color:var(--ink);
+  opacity:.55;
+}
+.toolbar button{
+  background:none;
+  color:var(--ink2);
+  border:none;
+  padding:6px 10px;
+  cursor:pointer;
+  font-size:13px;
+  white-space:nowrap;
+  letter-spacing:.5px;
+}
+.toolbar button:hover{color:var(--ink)}
+.toolbar select{
+  background:var(--card);
+  color:var(--ink2);
+  border:none;
+  padding:6px 4px;
+  cursor:pointer;
+  font-size:13px;
+  white-space:nowrap;
+}
+.save-status{font-size:12px;color:var(--ink3);white-space:nowrap}
+body.viewing-checkin #loadDemo,body.viewing-checkin #templateBtn,
+body.viewing-monthly #loadDemo,body.viewing-monthly #templateBtn,
+body.viewing-books #loadDemo,body.viewing-books #templateBtn,
+body.viewing-review #loadDemo,body.viewing-review #templateBtn,
+body.viewing-settings #loadDemo,body.viewing-settings #templateBtn{display:none}
+
+/* ---------- quote: quiet epigraph ---------- */
+.quote-wrap{
+  position:relative;
+  margin:10px 0 16px;
+  padding:0 64px 0 0;
+  text-align:left;
+}
+h1{
+  margin:0;
+  font-family:var(--serif);
+  font-size:16.5px;
+  line-height:1.8;
+  letter-spacing:.2px;
+  font-style:italic;
+  color:#3E3A32;
+  font-weight:400;
+}
+h1 span{
+  display:block;
+  margin-top:6px;
+  text-align:left;
+  color:var(--ink3) !important;
+  font-size:11px;
+  font-style:normal;
+  letter-spacing:2.5px;
+  text-transform:uppercase;
+}
+.quote-actions{position:absolute;right:0;top:0;display:flex;gap:2px}
+.quote-actions button{
+  background:none;border:none;padding:5px;cursor:pointer;
+  color:var(--ink3);display:flex;align-items:center;
+}
+.quote-actions button:hover{color:var(--ink)}
+.quote-actions svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.quote-wrap input{font-style:normal;font-family:var(--sans)}
+
+/* ---------- generic cards ---------- */
+.top,.card{
+  background:none;
+  border:none;
+  border-radius:0;
+  padding:0;
+  margin-bottom:30px;
+  box-shadow:none;
+}
+.top label,.card label{font-size:13px;color:var(--ink2)}
+
+/* ---------- inputs: underline, quiet ---------- */
+input:not([type]),input[type="text"],input[type="number"],textarea{
+  font-size:14.5px;
+  padding:7px 0;
+  border:none;
+  border-bottom:1px solid var(--border);
+  border-radius:0;
+  width:100%;
+  background:transparent !important;
+  color:var(--ink) !important;
+  font-family:var(--sans);
+}
+input:not([type]):focus,input[type="text"]:focus,input[type="number"]:focus,textarea:focus{
+  outline:none;border-bottom-color:var(--accent);
+}
+input::placeholder,textarea::placeholder{color:var(--ink3);font-style:italic}
+input[type="number"]{font-variant-numeric:tabular-nums}
+input[type="checkbox"]{width:16px;height:16px;accent-color:var(--accent);flex:none}
+input[type="date"]{
+  width:100%;
+  font-family:var(--sans);
+  font-size:26px;
+  font-weight:700;
+  border:none;
+  border-bottom:1px solid var(--border);
+  border-radius:0;
+  background:transparent;
+  color:var(--ink);
+  padding:8px 0;
+  cursor:pointer;
+}
+input[type="date"]::-webkit-calendar-picker-indicator{display:none}
+input[type="month"],#revYearSel{
+  width:auto;
+  font-family:var(--serif);
+  font-size:17px;
+  font-weight:700;
+  border:none;
+  border-bottom:1px solid var(--border);
+  border-radius:0;
+  background:transparent;
+  color:var(--ink);
+  padding:8px 2px;
+  cursor:pointer;
+}
+input[type="month"]::-webkit-calendar-picker-indicator{display:none}
+input[type="month"]:focus,#revYearSel:focus{outline:none;border-bottom-color:var(--accent)}
+input[type="color"]{width:52px;height:36px;padding:3px;border:1px solid var(--border);border-radius:2px;background:var(--white);cursor:pointer}
+input[type="file"]{font-size:13px}
+select{
+  font-size:14.5px;
+  padding:7px 0;
+  border:none;
+  border-bottom:1px solid var(--border);
+  border-radius:0;
+  background:transparent;
+  color:var(--ink);
+  font-family:var(--sans);
+  cursor:pointer;
+}
+select:focus{outline:none;border-bottom-color:var(--accent)}
+textarea{min-height:80px;line-height:1.7}
+
+/* ---------- buttons ---------- */
+button{font-family:var(--sans)}
+button.primary{
+  background:transparent;
+  color:var(--ink);
+  border:none;
+  border-bottom:1px solid var(--border);
+  border-radius:0;
+  padding:7px 2px;
+  cursor:pointer;
+  font-size:13.5px;
+  transition:border-color .15s ease,color .15s ease;
+}
+button.primary:hover{border-color:var(--accent-deep);color:var(--accent-deep)}
+button.ghost{
+  background:none;
+  color:var(--ink2);
+  border:1px solid transparent;
+  border-radius:2px;
+  padding:7px 12px;
+  cursor:pointer;
+  margin:0 6px 0 0;
+  font-size:13px;
+}
+button.ghost:hover{color:var(--ink)}
+
+/* generic inline field rows (e.g. category form) */
+.row{display:flex;gap:14px;flex-wrap:wrap}
+.row>*{flex:1;min-width:0}
+
+/* ---------- daily: date strip ---------- */
+#view-daily .top{
+  background:none;
+  border:none;
+  border-bottom:1px solid var(--line);
+  border-radius:0;
+  padding:0 0 18px;
+  margin:0 0 30px;
+}
+#view-daily .dateline{position:relative;margin-bottom:8px}
+.dline, .month-ctl .dline{
+  background:none;border:none;padding:0;
+  font-family:var(--serif);font-size:18px;font-weight:600;
+  letter-spacing:.5px;color:var(--ink);cursor:pointer;text-align:left;
+}
+.dline:hover, .month-ctl .dline:hover{
+  color:var(--theme-deep);
+  text-decoration:underline;
+  text-decoration-style:dotted;
+  text-decoration-color:var(--ink3);
+  text-decoration-thickness:1px;
+  text-underline-offset:4px;
+}
+/* Daily date — 方案 A：大号衬线 + 主题色年份 + 弱化星期 */
+#dateDisplay.dline{
+  display:inline-flex;align-items:baseline;gap:10px;
+  margin:8px 0 14px;
+}
+#dateDisplay .dline-date{font-family:var(--serif);font-size:30px;font-weight:600;letter-spacing:.3px;color:var(--ink);line-height:1.2}
+#dateDisplay .dline-yr{color:var(--theme-deep);font-weight:600}
+#dateDisplay .dline-week{font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:var(--ink3);white-space:nowrap}
+#dateDisplay.dline:hover{
+  color:var(--ink);
+  opacity:.9;
+  text-decoration:none;
+}
+#dateDisplay.dline:hover .dline-yr{color:var(--accent-deep)}
+/* month / year titles across tabs — match Daily's anchor weight */
+#monthInputDisplay.dline, #mpMonthInputDisplay.dline{
+  font-size:26px;font-weight:600;letter-spacing:.3px;
+}
+#monthInputDisplay .dline-yr, #mpMonthInputDisplay .dline-yr{color:var(--theme-deep);font-weight:600}
+#revYearSel{font-size:26px}
+#view-daily .top .row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  gap:22px;
+}
+#view-daily .top .row > div:first-child label span{display:none}
+#view-daily .top .row > div:last-child{max-width:460px}
+#view-daily .top .row > div:first-child{position:relative}
+
+/* ---------- day-flip transition ---------- */
+#view-daily.day-flip{animation:dayFlip .22s ease}
+@keyframes dayFlip{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:none}}
+
+/* ---------- calendar popover ---------- */
+.cal-pop{
+  position:absolute;
+  top:calc(100% + 8px);
+  left:0;
+  z-index:60;
+  width:272px;
+  background:#FFFFFF;
+  border:1px solid var(--border);
+  border-radius:4px;
+  box-shadow:0 8px 28px rgba(34,33,30,.14);
+  padding:14px 14px 12px;
+}
+.cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.cal-nav{background:none;border:none;font-size:16px;color:var(--ink2);cursor:pointer;padding:2px 8px}
+.cal-nav:hover{color:var(--ink)}
+.cal-title{font-size:13.5px;font-weight:600;color:var(--ink);letter-spacing:1px}
+.cal-week{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:10.5px;color:var(--ink3);margin-bottom:4px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.cal-day{
+  position:relative;height:32px;border:none;background:none;border-radius:50%;
+  font-size:12.5px;color:var(--ink);cursor:pointer;font-family:var(--sans);
+  display:flex;align-items:center;justify-content:center;
+  font-variant-numeric:tabular-nums;
+}
+.cal-day:hover{background:var(--accent-tint)}
+.cal-day.today{font-weight:700;color:var(--accent-deep);box-shadow:inset 0 0 0 1px var(--theme)}
+.cal-day.sel{background:var(--theme);color:#FFFFFF;box-shadow:none}
+.cal-day.sel:hover{background:var(--theme)}
+.cal-day.dot::after{
+  content:"";position:absolute;bottom:4px;width:4px;height:4px;border-radius:50%;background:var(--ink3);
+}
+.cal-day.sel.dot::after{background:#FFFFFF}
+
+/* ---------- month / year pickers (other tabs) ---------- */
+.month-pop{
+  position:fixed;
+  z-index:70;
+  width:240px;
+  background:#FFFFFF;
+  border:1px solid var(--border);
+  border-radius:4px;
+  box-shadow:0 8px 28px rgba(34,33,30,.14);
+  padding:14px 14px 12px;
+}
+.month-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.mp-cell{
+  height:40px;border:none;background:none;border-radius:4px;
+  font-size:13px;color:var(--ink);cursor:pointer;font-family:var(--sans);
+}
+.mp-cell:hover{background:var(--accent-tint)}
+.mp-cell.today{font-weight:700;color:var(--accent-deep);box-shadow:inset 0 0 0 1px var(--theme)}
+.mp-cell.sel{background:var(--theme);color:#FFFFFF;box-shadow:none}
+.mp-cell.sel:hover{background:var(--theme)}
+
+/* ---------- view flip (other tabs) ---------- */
+.view-flip{animation:viewFlip .2s ease}
+@keyframes viewFlip{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+#view-daily .top .row > div{min-width:0}
+#view-daily .top label{display:block}
+#view-daily .top label span{
+  display:block;
+  font-size:10.5px;
+  letter-spacing:2.5px;
+  text-transform:uppercase;
+  color:var(--ink2);
+  margin-bottom:2px;
+}
+#view-daily .top label br{display:none}
+#view-daily .top .ghost{margin-top:18px}
+
+/* ---------- daily: two balanced columns ---------- */
+#view-daily .layout{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:0 48px;
+  align-items:start;
+  margin-top:4px;
+}
+#view-daily .vdiv{display:none}
+#view-daily .card{
+  background:none;border:none;border-radius:0;
+  padding:0;margin:0;box-shadow:none;
+}
+#view-daily .card > *:first-child{margin-top:0}
+
+/* section heads: small caps + hairline */
+#view-daily h2,#view-daily h3{
+  font-family:var(--sans);
+  font-weight:600;
+  font-size:13px;
+  letter-spacing:2px;
+  text-transform:uppercase;
+  color:var(--ink);
+  margin:46px 0 8px;
+  padding:0 0 8px;
+  border-bottom:1px solid var(--line-soft);
+}
+#view-daily h2::before,#view-daily h3::before{
+  content:"";
+  display:inline-block;
+  width:6px;
+  height:6px;
+  margin-right:8px;
+  background:var(--theme,var(--accent-deep));
+  vertical-align:1px;
+}
+#view-daily h3 span[data-i18n="peopleSub"]{
+  display:block;
+  font-size:11px;
+  letter-spacing:.5px;
+  text-transform:none;
+  font-weight:400;
+  color:var(--ink3);
+  margin-top:4px;
+}
+
+/* records group: meals + activities + spending in one quiet block */
+.rec-group{
+  margin-top:30px;
+  padding:16px 20px 20px;
+  background:rgba(244,240,230,.45);
+  border:1px solid var(--line);
+  border-radius:3px;
+}
+#view-daily .rec-group h3{margin:30px 0 8px}
+#view-daily .rec-group h3:first-child{margin-top:0}
+.people-sec{display:none !important}
+
+/* section titles for the other views — match the daily plan's 二级标题 */
+.sec-title{
+  font-family:var(--sans);
+  font-weight:600;
+  font-size:13px;
+  letter-spacing:2px;
+  text-transform:uppercase;
+  color:var(--ink);
+  margin:0 0 8px;
+  padding:0 0 8px;
+  border-bottom:1px solid var(--line-soft);
+}
+.sec-title::before{
+  content:"";
+  display:inline-block;
+  width:6px;
+  height:6px;
+  margin-right:8px;
+  background:var(--theme,var(--accent-deep));
+  vertical-align:1px;
+}
+
+/* compact the Done Timeline form (right column) */
+#view-daily .layout .card:last-child label span{
+  display:block;
+  font-size:11px;
+  letter-spacing:2px;
+  text-transform:uppercase;
+  color:var(--ink2);
+  margin-bottom:5px;
+}
+#view-daily .layout .card:last-child label br{display:none}
+#view-daily .layout .card:last-child > .row{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:16px;
+}
+#view-daily .layout .card:last-child > .row > div:nth-child(4){
+  grid-column:1 / -1;
+}
+#view-daily .layout .card:last-child select,
+#view-daily .layout .card:last-child input[type="number"],
+#view-daily .layout .card:last-child input[type="text"]{
+  padding:7px 0;
+  font-size:14px;
+}
+#view-daily .layout .card:last-child .hint{font-size:12px;line-height:1.6;margin:10px 0 0}
+
+/* lists */
+ul{list-style:none;padding:0;margin:0}
+ul + .add{margin-top:12px}
+li{
+  display:flex;
+  gap:12px;
+  align-items:center;
+  padding:10px 0;
+  border-bottom:1px solid var(--line-soft);
+  font-size:14.5px;
+  transition:background .16s ease;
+}
+li:last-child{border-bottom:none}
+li span{flex:1;color:var(--ink);min-width:0}
+li.done span{text-decoration:line-through;color:var(--ink3)}
+li:hover{background:var(--accent-tint)}
+li button,.event button{background:none;border:none;color:#C9C2B2;cursor:pointer;font-size:15px;padding:0 2px}
+li button:hover,.event button:hover{color:var(--clay)}
+.add{display:flex;gap:10px;margin-top:14px;align-items:center}
+.add input{flex:1;min-width:0}
+.add select{flex:0 1 auto;min-width:0}
+.add button.primary{flex:none}
+/* round “＋” add button: soft, borderless, tactile */
+.add button.primary:not(#bkAdd){
+  width:32px;height:32px;padding:0;
+  border:none;border-radius:50%;
+  background-color:var(--accent-tint);
+  color:var(--accent-deep);
+  font-size:18px;line-height:1;
+  display:inline-flex;align-items:center;justify-content:center;
+  cursor:pointer;
+  transition:background-color .15s ease,color .15s ease,box-shadow .15s ease;
+}
+.add button.primary:not(#bkAdd):hover{
+  background-color:var(--tab);
+  color:var(--ink);
+  box-shadow:0 1px 4px rgba(34,33,30,.12);
+}
+
+/* meals — four compact cells in a row */
+.meals{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px 14px}
+.meals label{
+  display:flex;flex-direction:column;gap:6px;align-items:flex-start;
+  margin:0;padding:0;border-bottom:none;
+}
+.meals label:last-child{border-bottom:none}
+.meals b{
+  width:24px;height:24px;flex:none;
+  display:inline-flex;align-items:center;justify-content:center;
+  border:1px solid var(--border);border-radius:50%;
+  font-size:11px;font-weight:500;
+  background:var(--card);color:var(--ink2);
+}
+
+/* people */
+#peopleList strong{font-weight:600}
+#peopleList li{align-items:flex-start}
+
+/* spending */
+#spendingList li span{font-variant-numeric:tabular-nums}
+#spendingList li .sp-cat{flex:1;color:var(--ink2);font-weight:400;min-width:0}
+#spendingList li .sp-amt{flex:0 0 auto;color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+#spendingTotal{
+  font-size:13.5px;font-weight:600;color:var(--ink);
+  border-top:1px solid var(--line);
+  padding-top:12px;margin:8px 0 0;text-align:right;
+  font-variant-numeric:tabular-nums;
+}
+
+/* category dropdown */
+.cat-dropdown{position:relative;display:block}
+.cat-button{
+  width:100%;display:flex;align-items:center;gap:10px;
+  padding:7px 0;border:none;border-bottom:1px solid var(--border);border-radius:0;
+  background:transparent;color:var(--ink);cursor:pointer;
+  font-size:14.5px;text-align:left;white-space:nowrap;overflow:hidden;
+}
+.cat-button #catLabel{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cat-dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--line-soft);border:none}
+.cat-arrow{margin-left:auto;color:var(--ink3);flex:none;font-size:11px}
+.cat-menu{
+  position:absolute;left:0;right:0;top:calc(100% + 4px);
+  background:var(--paper-soft);border:1px solid var(--line-soft);border-radius:6px;
+  box-shadow:0 4px 12px rgba(0,0,0,.05);
+  z-index:50;max-height:280px;overflow:auto;
+}
+.cat-item{
+  display:flex;align-items:center;gap:10px;padding:10px 12px;
+  cursor:pointer;font-size:14px;color:var(--ink);white-space:nowrap;
+}
+.cat-item:hover{background:var(--accent-tint)}
+.cat-item.add{border-top:1px solid var(--line);color:var(--ink2)}
+#catForm{margin-top:14px;padding:16px;border:1px dashed var(--border);border-radius:2px;background:var(--card)}
+
+/* timeline */
+.timeline-wrap{
+  border:1px solid var(--line);border-radius:2px;
+  background:transparent;overflow:hidden;
+  margin-top:16px;
+  padding:24px 0 28px;
+}
+.timeline{position:relative;height:1632px;margin-left:64px}
+.slot{height:34px;border-bottom:1px solid var(--line-soft);position:relative}
+.slot span{
+  position:absolute;left:-64px;top:-8px;width:52px;text-align:right;
+  font-size:10.5px;color:var(--ink3);font-variant-numeric:tabular-nums;
+}
+.event{
+  position:absolute;left:10px;right:10px;
+  border-left:3px solid var(--accent);
+  border-top:1px solid rgba(59,58,53,.07);
+  border-right:1px solid rgba(59,58,53,.07);
+  border-bottom:1px solid rgba(59,58,53,.07);
+  padding:6px 12px;overflow:hidden;
+  border-radius:0 2px 2px 0;
+  color:var(--ink);line-height:1.45;
+}
+.event strong{display:block;font-size:13px;font-family:var(--sans);font-weight:600}
+.event p{margin:2px 0 0;font-size:12px;color:var(--ink2)}
+.event button{position:absolute;right:4px;top:2px}
+.hint{font-size:12.5px;color:var(--ink3);line-height:1.7}
+#view-daily .hint{margin:10px 0 0}
+
+/* day pager */
+.daypager{display:flex;align-items:center;justify-content:center;gap:18px;margin:46px 0 4px}
+.pagerbtn{
+  width:auto;height:auto;border-radius:0;
+  background:none;color:var(--ink2);
+  border:none;
+  font-size:20px;line-height:1;cursor:pointer;padding:4px 10px;
+}
+.pagerbtn:hover{color:var(--theme-deep)}
+.pagerdate{font-family:var(--serif);font-size:22px;font-weight:700;letter-spacing:.5px;min-width:150px;text-align:center;color:var(--ink)}
+.daypager .ghost{margin:0}
+
+/* ---------- shared month / header strips ---------- */
+.monthbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.month-ctl{display:flex;align-items:center;gap:8px}
+.month-ctl button{
+  background:none;color:var(--ink2);border:none;
+  border-radius:0;padding:4px 8px;cursor:pointer;font-size:15px;
+}
+.month-ctl button:hover{color:var(--theme-deep)}
+.month-name{display:none}
+.themebar{display:none}
+.themebar label{display:none}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+#view-checkin .hint{margin:12px 0 0}
+#view-checkin .add{margin-top:14px}
+.markbar{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.marklabel{font-size:14px;color:var(--ink2)}
+.markseg{
+  display:flex;gap:4px;padding:4px;
+}
+.markseg button{
+  border:none;background:none;font-size:16px;width:40px;height:32px;border-radius:2px;
+  cursor:pointer;color:var(--ink);display:flex;align-items:center;justify-content:center;
+}
+.markseg button.on{background:var(--accent-tint)}
+.fillsw{width:15px;height:15px;border-radius:2px;background:var(--clay);display:block;border:1px solid rgba(59,58,53,.25)}
+
+/* ---------- tables ---------- */
+.table-wrap{overflow-x:auto;border:none;border-radius:0;background:transparent}
+.table-wrap::-webkit-scrollbar{height:4px}
+.table-wrap::-webkit-scrollbar-thumb{background:#D8D2C4;border-radius:4px}
+.table-wrap::-webkit-scrollbar-track{background:transparent}
+table{border-collapse:separate;border-spacing:0;width:100%}
+thead th{
+  background:transparent;color:#a0a0a0;
+  font-size:12px;font-weight:500;padding:6px 2px;
+  border:none;border-bottom:1px solid var(--line-soft);
+  min-width:36px;position:sticky;top:0;z-index:3;
+  font-variant-numeric:tabular-nums;
+}
+thead th.today{background:var(--accent-tint);border-radius:6px}
+thead th.corner,tbody th{position:sticky;left:0;z-index:2;text-align:left;min-width:150px;max-width:210px}
+thead th.corner{background:transparent}
+tbody th{
+  font-size:13.5px;font-weight:500;padding:8px 14px 8px 0;
+  border:none;border-bottom:1px solid var(--line-soft);
+  background:transparent;vertical-align:middle;
+}
+tbody td{
+  border:none;border-bottom:1px solid var(--line-soft);
+  padding:0;min-width:36px;height:40px;text-align:center;
+}
+tbody td.today{background:rgba(124,132,100,.05);border-radius:6px}
+.hwrap{display:flex;align-items:center;gap:6px}
+.hname{flex:1;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+.hname:hover{color:var(--accent-deep)}
+.hname-edit{flex:1;min-width:0;font-size:13.5px;padding:4px 2px;border:none;border-bottom:1px solid var(--accent);border-radius:0}
+.rowdel{background:none;border:none;color:#C9C2B2;cursor:pointer;font-size:15px;padding:2px 4px}
+.rowdel:hover{color:var(--clay)}
+.cell{background:none;border:none;width:100%;height:40px;font-size:14px;line-height:1;cursor:pointer;color:transparent;padding:0;border-radius:50%;transition:background .15s ease}
+.cell:hover{background:rgba(124,132,100,.08)}
+
+/* ---------- monthly plan ---------- */
+.mp-table-wrap{overflow-x:auto;border:none;border-radius:0;background:transparent}
+table.mp-table{border-collapse:separate;border-spacing:0;width:100%;table-layout:fixed}
+.mp-table thead th{
+  background:var(--paper-soft);color:var(--ink);font-size:14px;font-weight:600;
+  padding:10px 4px;border-bottom:1px solid var(--line);text-align:center;
+}
+.mp-table tbody td{
+  vertical-align:top;border-bottom:1px solid var(--line-soft);
+  border-right:1px solid var(--line-soft);padding:6px;height:104px;overflow:hidden;
+}
+.mp-table tbody tr:last-child td{border-bottom:none}
+.mp-table tbody td:last-child{border-right:none}
+.mp-head{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.mp-num{
+  border:none;background:none;font-family:var(--sans);font-size:14px;font-weight:600;
+  color:var(--ink);cursor:pointer;padding:2px 7px;border-radius:2px;line-height:1.4;
+  font-variant-numeric:tabular-nums;
+}
+.mp-num:hover{background:var(--accent-tint)}
+.mp-num.mp-other{color:#C9C2B2;font-weight:400}
+.mp-today .mp-num{background:var(--accent-tint)}
+.mp-tag{font-size:11px;line-height:1.4;white-space:nowrap}
+.mp-hol{color:#A0523B;font-weight:700}
+.mp-term{color:var(--ink2)}
+.mp-ban{color:var(--white);background:var(--ink2);border-radius:2px;padding:1px 5px;font-size:10px}
+.mp-body{
+  min-height:58px;font-size:13px;line-height:1.6;color:var(--ink);
+  outline:none;border-radius:2px;padding:2px 4px;word-break:break-word;
+}
+.mp-body:focus{background:var(--paper-soft)}
+#view-monthly .hint{margin:12px 0 0}
+
+/* ---------- books ---------- */
+.bk-list{display:flex;flex-direction:column}
+.bk-head,.bk-row{
+  display:grid;
+  grid-template-columns:0.85fr 1.7fr 1.5fr 0.85fr 1.15fr 0.65fr 30px;
+  gap:14px;
+  align-items:center;
+}
+.bk-head{
+  font-size:11px;font-weight:500;color:var(--ink3);
+  letter-spacing:1px;text-transform:uppercase;
+  padding:0 0 10px;border-bottom:1px solid var(--line-soft);
+}
+.bk-row{padding:14px 0;border-bottom:1px solid rgba(0,0,0,.05)}
+.bk-row:last-child{border-bottom:none}
+.bk-cell{min-height:22px;font-size:14px;color:var(--ink);outline:none;border-radius:2px;padding:2px 0;word-break:break-word}
+.bk-cell:focus{background:none}
+.bk-bought{font-size:12px;color:var(--ink3)}
+.bk-title{font-family:var(--serif);font-size:17px;font-weight:600;color:var(--ink)}
+.bk-author{font-size:13.5px;color:var(--ink2)}
+.bk-comment{font-size:13px;color:var(--ink2)}
+.bk-rating{display:flex;align-items:center}
+.bk-finished{display:flex;align-items:center;justify-content:center}
+.bk-del{display:flex;align-items:center;justify-content:center}
+.bk-check{
+  appearance:none;-webkit-appearance:none;
+  width:18px;height:18px;
+  border:1px solid var(--border);border-radius:4px;
+  background:transparent;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;
+  transition:background .15s ease,border-color .15s ease;
+}
+.bk-check:checked{border:1px solid var(--theme);background:var(--theme)}
+.bk-check:checked::after{content:"✓";color:#fff;font-size:12px;font-weight:700;line-height:1}
+.stars{display:inline-flex;gap:2px;align-items:center;min-height:26px;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.stars button{background:none;border:none;font-size:15px;line-height:1;color:#DDD6C8;cursor:pointer;padding:0 1px}
+.stars button.lit{color:var(--theme-deep)}
+
+/* ---------- year review ---------- */
+table.rev-table{border-collapse:separate;border-spacing:0;width:100%;table-layout:fixed}
+.rev-table thead th{
+  background:transparent;color:var(--ink3);font-size:12px;font-weight:500;
+  padding:10px 8px 8px;border-bottom:1px solid var(--line);text-align:left;
+  font-family:var(--sans);text-transform:uppercase;letter-spacing:1px;
+}
+.rev-table thead th:first-child{width:60px}
+.rev-table tbody td{border-bottom:1px solid var(--line-soft);border-right:1px solid var(--line-soft);padding:8px;vertical-align:top}
+.rev-table tbody td:last-child{border-right:none}
+.rev-table tbody tr:last-child td{border-bottom:none}
+.rev-list{display:flex;flex-direction:column}
+.rev-row{display:grid;grid-template-columns:140px minmax(0,1fr);gap:24px;padding:12px 0;border-bottom:1px solid var(--line-soft)}
+.rev-row-overall{border-bottom:none}
+.rev-month{font-family:var(--serif);font-size:14px;font-weight:600;color:var(--theme-deep);padding-top:2px;white-space:nowrap}
+.rev-cell{min-height:28px;font-size:14.5px;line-height:1.7;color:var(--ink);outline:none;border:none;background:transparent;padding:2px 0;word-break:break-word}
+.rev-cell:focus{background:none}
+#view-books .hint,#view-review .hint{margin:12px 0 0}
+
+/* ---------- settings ---------- */
+#view-settings h2{
+  font-family:var(--sans);font-size:20px;font-weight:500;
+  margin:0 0 10px;color:var(--ink);letter-spacing:.3px;
+}
+details.adv{margin-top:6px}
+details.adv summary{cursor:pointer;font-weight:600;font-size:14.5px;color:var(--ink);padding:8px 0}
+.set-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;align-items:center}
+.set-row .primary{flex:0 0 auto}
+
+/* restore modal */
+#restoreModalOv button.ghost{margin:0}
+
+/* ---------- responsive ---------- */
+@media(max-width:920px){
+  #view-daily .layout{grid-template-columns:minmax(0,1fr);gap:0}
+}
+@media(max-width:640px){
+  .page{padding:24px 18px 30px}
+  body{padding:56px 12px 48px}
+  .book-tabs{left:0;right:0;gap:2px}
+  .book-tab{padding:6px 4px 8px;font-size:10.5px;letter-spacing:1px;border-radius:5px 5px 0 0}
+  #view-daily .top .row{grid-template-columns:minmax(0,1fr);gap:18px}
+  .meals{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 12px}
+  .toolbar .brand{font-size:17px}
+  .month-name{font-size:20px}
+}
+</style>
+</head>
+<body class="viewing-daily">
+<div id="syncOverlay">
+  <div class="card">
+    <div id="cfgPanel">
+      <h2>连接云端</h2>
+      <div class="sub">这一步让手机和电脑的日记互通。下面两个值都在 Supabase 的 Settings → API 页面里复制。</div>
+      <label>Project URL（项目网址）</label>
+      <input id="cfgUrl" placeholder="https://xxxx.supabase.co">
+      <label>anon public key（公钥）</label>
+      <input id="cfgKey" placeholder="eyJhbGciOi...">
+      <div class="err" id="cfgErr"></div>
+      <button class="btn" id="cfgSave">保存并继续</button>
+      <div class="hint">这两个值不是密码，但也不用随便发给别人。保存后只需设置这一次。</div>
+    </div>
+    <div id="loginPanel" style="display:none">
+      <h2>登录日记</h2>
+      <div class="sub">同一个账号，手机电脑都能看到同一份日记。</div>
+      <label>邮箱</label>
+      <input id="lgEmail" type="email" placeholder="you@example.com">
+      <label>密码</label>
+      <input id="lgPass" type="password" placeholder="至少 6 位">
+      <div class="err" id="lgErr"></div>
+      <div class="row">
+        <button class="btn" id="lgIn">登录</button>
+        <button class="btn" id="lgUp">注册新账号</button>
+      </div>
+      <button class="btn ghost" id="lgBack">重新设置云端连接</button>
+    </div>
+  </div>
+</div>
+<div id="cloudBadge"><span class="dot"></span><span id="cloudText">连接中…</span><span class="out" id="cloudOut">退出</span></div>
+
+<div class="page">
+<div class="book-tabs">
+  <button class="book-tab tab-daily active" data-view="view-daily"><span data-i18n="tabDaily">日计划</span></button>
+  <button class="book-tab tab-checkin" data-view="view-checkin"><span data-i18n="tabCheckin">打卡</span></button>
+  <button class="book-tab tab-monthly" data-view="view-monthly"><span data-i18n="tabMonthly">月计划</span></button>
+  <button class="book-tab tab-books" data-view="view-books"><span data-i18n="tabBooks">书单</span></button>
+  <button class="book-tab tab-review" data-view="view-review"><span data-i18n="tabReview">月总结</span></button>
+  <button class="book-tab tab-settings" data-view="view-settings"><span data-i18n="tabSettings">设置</span></button>
+</div>
+<div class="toolbar"><span class="brand">MY DIARY</span><button class="ghost" id="obsidianBtn" data-i18n="exportObsidian">Export to Obsidian (.md)</button><button id="loadDemo" data-i18n="loadDemo">Load demo</button><button id="templateBtn" data-i18n="template">Template</button><select id="langSelect" title="Language"><option value="en-US">English (US)</option><option value="zh-CN">简体中文</option><option value="zh-TW">繁體中文（台灣）</option></select><span id="saveStatus" class="save-status" data-i18n="autosaveReady">Autosave on</span></div>
+<div id="view-daily" class="view">
+<div class="top">
+  <div class="dateline"><button type="button" class="dline" id="dateDisplay"></button><div class="cal-pop" id="calPop" style="display:none"><div class="cal-head"><button type="button" class="cal-nav" id="calPrev">‹</button><div class="cal-title" id="calTitle"></div><button type="button" class="cal-nav" id="calNext">›</button></div><div class="cal-week" id="calWeek"></div><div class="cal-grid" id="calGrid"></div></div></div>
+  <div class="quote-wrap"><h1 id="quoteBox">“We write to taste life twice, in the moment and in retrospect.” <span>— Anaïs Nin</span></h1><div class="quote-actions"><button id="copyQuoteBtn" title="Copy quote" data-i18n-title="copyQuote"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button><button id="editQuoteBtn" title="Edit quote" data-i18n-title="editQuote"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button></div></div>
+  <input type="date" id="date" readonly style="display:none">
+</div>
+<div class="layout">
+  <div class="card">
+    <h2><span data-i18n="todo">TO DO LIST</span></h2>
+    <ul id="doneList"></ul>
+    <div class="add"><input id="newDone" placeholder="Add a to-do…" data-i18n-ph="newDonePh"><button class="primary" onclick="addItem('doneList','newDone')">＋</button></div>
+
+    <div class="rec-group">
+    <h3 data-i18n="meals">MEALS</h3>
+    <div class="meals">
+      <label><b>B</b><input id="mealB" placeholder="Breakfast" data-i18n-ph="mealBPh"></label>
+      <label><b>L</b><input id="mealL" placeholder="Lunch" data-i18n-ph="mealLPh"></label>
+      <label><b>D</b><input id="mealD" placeholder="Dinner" data-i18n-ph="mealDPh"></label>
+      <label><b>S</b><input id="mealS" placeholder="Snack" data-i18n-ph="mealSPh"></label>
+    </div>
+
+    <h3 data-i18n="activities">ACTIVITIES</h3>
+    <ul id="actList"></ul>
+    <div class="add"><input id="newAct" placeholder="Add an activity…" data-i18n-ph="newActPh"><button class="primary" onclick="addItem('actList','newAct')">＋</button></div>
+
+    <div class="people-sec" hidden>
+    <h3><span data-i18n="people">PEOPLE</span> — <span data-i18n="peopleSub">like MEALS, one line per person</span></h3>
+    <p class="hint" data-i18n="peopleHint">Who did you meet today, and what connected you? This list exports to Obsidian as [[Name]] links. Use the exact name from your Obsidian card.</p>
+    <ul id="peopleList"></ul>
+    <div class="add"><input id="pName" placeholder="Name" data-i18n-ph="pNamePh"><select id="pCircle"><option value="Class Committee" data-i18n="circleClass">Class Committee</option><option value="Volunteer Group" data-i18n="circleVolunteer">Volunteer Group</option><option value="Press Team" data-i18n="circlePress">Press Team</option><option value="Other" data-i18n="circleOther">Other</option></select><input id="pNote" placeholder="Connection / note, e.g. talked about rota" data-i18n-ph="pNotePh"><button class="primary" onclick="addPerson()">＋</button></div>
+
+    </div>
+    <h3 data-i18n="spending">Spending</h3>
+    <ul id="spendingList"></ul>
+    <p class="hint" id="spendingTotal"></p>
+    <div class="add"><input id="spendingCat" placeholder="Category, e.g. Coffee" data-i18n-ph="spendingCatPh"><input type="number" id="spendingAmt" placeholder="Amount, e.g. 25" min="0" step="0.01" data-i18n-ph="spendingAmtPh"><button class="primary" onclick="addSpending()">＋</button></div>
+    </div>
+    <h3 data-i18n="notes">Notes</h3>
+    <ul id="notesList"></ul>
+    <div class="add"><input id="newNote" placeholder="Add a note…" data-i18n-ph="newNotePh"><button class="primary" onclick="addNote()">＋</button></div>
+  </div>
+
+  <div class="vdiv" aria-hidden="true"></div>
+  <div class="card">
+    <h2><span data-i18n="doneTimeline">Done Timeline</span></h2>
+    
+    <div class="row">
+      <div><label><span data-i18n="start">Start</span><br><select id="evTime"></select></label></div>
+      <div><label><span data-i18n="end">End</span><br><select id="evEnd"></select></label></div>
+      <div><label><span data-i18n="duration">Duration (min)</span><br><input type="number" id="evDur" min="30" step="30" value="60"></label></div>
+      <div ><label><span data-i18n="category">Category</span><br><span class="cat-dropdown" id="catDropdown"><button type="button" class="cat-button" id="catButton"><span class="cat-dot" id="catDot"></span><span id="catLabel">Select category…</span><span class="cat-arrow">▾</span></button><div class="cat-menu" id="catMenu" style="display:none"></div></span></label></div>
+    </div>
+    <div id="catForm" style="display:none;margin-top:10px">
+      <div class="row">
+        <div><label><span data-i18n="catName">Category name</span><br><input id="catName" placeholder="e.g. Reading" data-i18n-ph="catNamePh"></label></div>
+        <div><label><span data-i18n="colour">Colour</span><br><input type="color" id="catColor" value="#8a9a86" style="height:38px;padding:4px"></label></div>
+      </div>
+      <div style="margin-top:12px"><button class="primary" id="catSaveBtn" data-i18n="addCategory">Add category</button> <button class="ghost" id="catCancelBtn" data-i18n="cancel">Cancel</button></div>
+      <p class="hint" data-i18n="catHint">Pick a colour like in PowerPoint — the left border uses this colour, the block uses a light tint of it. Typing an existing name updates its colour.</p>
+    </div>
+    <div style="margin-top:12px"><label><span data-i18n="note">Note</span><br><input id="evDesc" placeholder="Note (optional), e.g. Fogg Behavior Model p1-100" data-i18n-ph="evDescPh"></label></div>
+    <div style="margin-top:12px"><button class="primary" onclick="addEvent()" data-i18n="addTimeline">Add to timeline</button> <button class="ghost" id="catEditBtn" data-i18n="editColour">Edit colour</button></div>
+    <div class="timeline-wrap" style="margin-top:16px"><div class="timeline" id="timeline"></div></div>
+    <p class="hint" data-i18n="timelineDeleteHint">Click × on an event to delete it. All changes save automatically.</p>
+  </div>
+</div>
+<div class="daypager">
+  <button class="pagerbtn" id="prevDay" title="‹">‹</button>
+  <span class="pagerdate" id="pagerDate"></span>
+  <button class="pagerbtn" id="nextDay" title="›">›</button>
+  <button class="ghost" id="todayBtn" data-i18n="pagerToday">Today</button>
+</div>
+</div>
+<div id="view-checkin" class="view" style="display:none">
+
+
+<div class="card">
+  <div class="monthbar">
+    <div class="month-ctl">
+      
+      <button type="button" class="dline" id="monthInputDisplay"></button><input type="month" id="monthInput" readonly style="display:none">
+      
+      
+    </div>
+    <div class="month-name" id="monthName"></div>
+  </div>
+  <div class="themebar">
+    <label><span data-i18n="theme">主题色</span><input type="color" id="themeColor" value="#CF8FA8"></label>
+    <div class="actions">
+      <button class="ghost" id="clearMonthBtn" data-i18n="clearMonth">清空本月打卡</button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2 class="sec-title" data-i18n="tabCheckin">打卡</h2>
+  <div class="markbar">
+    <span class="marklabel" data-i18n="markAs">Mark as</span>
+    <div class="markseg" id="markSeg">
+      <button data-mode="heart" title="&#10084;">&#10084;</button>
+      <button data-mode="check" title="&#10003;">&#10003;</button>
+      <button data-mode="fill"><span class="fillsw" id="fillSw"></span></button>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead id="gridHead"></thead>
+      <tbody id="gridBody"></tbody>
+    </table>
+  </div>
+  
+  <p class="hint" data-i18n="renameHint"></p>
+  <div class="add"><input id="newHabit" data-i18n-ph="addHabitPh" placeholder=""><button class="primary" id="addHabitBtn">＋</button></div>
+</div>
+<div class="daypager">
+  <button class="pagerbtn" id="ckPrevM" title="‹">‹</button>
+  <span class="pagerdate" id="ckPagerMonth"></span>
+  <button class="pagerbtn" id="ckNextM" title="›">›</button>
+  <button class="ghost" id="ckTodayBtn" data-i18n="pagerThisMonth">This month</button>
+</div>
+</div>
+<div id="view-monthly" class="view" style="display:none">
+<div class="card">
+  <div class="monthbar">
+    <div class="month-ctl">
+      
+      <button type="button" class="dline" id="mpMonthInputDisplay"></button><input type="month" id="mpMonthInput" readonly style="display:none">
+      
+      
+    </div>
+    <div class="month-name" id="mpMonthName"></div>
+  </div>
+</div>
+<div class="card">
+  <h2 class="sec-title" data-i18n="tabMonthly">月计划</h2>
+  <div class="mp-table-wrap"><table class="mp-table">
+    <thead id="mpGridHead"></thead>
+    <tbody id="mpGridBody"></tbody>
+  </table></div>
+  <p class="hint" data-i18n="mpHint"></p>
+</div>
+<div class="daypager">
+  <button class="pagerbtn" id="mpPrevM2" title="‹">‹</button>
+  <span class="pagerdate" id="mpPagerMonth"></span>
+  <button class="pagerbtn" id="mpNextM2" title="›">›</button>
+  <button class="ghost" id="mpTodayBtn" data-i18n="pagerThisMonth">This month</button>
+</div>
+</div>
+<div id="view-books" class="view" style="display:none">
+<div class="card">
+  <h2 class="sec-title" data-i18n="tabBooks">书单</h2>
+  <div class="bk-list"><div class="bk-head"><div data-i18n="bookBought">Bought</div><div data-i18n="bookTitle">Title</div><div data-i18n="bookAuthor">Author / Publisher</div><div data-i18n="bookRating">Rating</div><div data-i18n="bookComment">Comment</div><div data-i18n="bookFinished">Finished</div><div></div></div><div class="bk-rows" id="bkBody"></div></div>
+  <p class="hint" id="bkEmpty" data-i18n="bookEmpty" style="display:none"></p>
+  <div class="add" style="margin-top:14px;"><button class="primary" id="bkAdd" data-i18n="bookAddRow" style="flex:0 0 auto;padding:9px 18px;">＋ Add row</button></div>
+</div>
+</div>
+<div id="view-review" class="view" style="display:none">
+<div class="card">
+  <div class="monthbar">
+    <div class="month-ctl">
+      <button id="revPrevY" title="‹">‹</button>
+      <input type="text" id="revYearSel" readonly>
+      <button id="revNextY" title="›">›</button>
+    </div>
+    <div class="month-name" id="revYearName"></div>
+  </div>
+</div>
+<div class="card">
+  <h2 class="sec-title" data-i18n="tabReview">月总结</h2>
+  <div class="rev-list" id="revBody"></div>
+  <p class="hint" data-i18n="revHint"></p>
+</div>
+</div>
+<div id="view-settings" class="view" style="display:none">
+<div class="card">
+  <h2><span data-i18n="dataTitle">数据管理</span></h2>
+  <p class="hint" data-i18n="autosaveNote" style="white-space:pre-line;"></p>
+  <div class="set-row">
+    <button class="primary" id="fullExportBtn" data-i18n="fullExport">备份我的数据</button>
+    <button class="ghost" id="fullImportBtn" data-i18n="fullImport">从备份恢复</button><input type="file" id="fullImportFile" accept=".json,application/json" style="display:none">
+  </div>
+</div>
+<div class="card">
+  <details class="adv">
+    <summary data-i18n="advancedTitle">高级功能</summary>
+    <p class="hint" data-i18n="advancedHint"></p>
+    <div class="set-row">
+      <button class="ghost" id="exportBtn" data-i18n="exportBackup">导出日记</button>
+      <button class="ghost" id="importBtn" data-i18n="importBackup">导入日记</button><input type="file" id="importFile" accept=".json,application/json" style="display:none">
+      <button class="ghost" id="ckExportBtn" data-i18n="ckExportBackup">导出打卡</button>
+      <button class="ghost" id="ckImportBtn" data-i18n="ckImportBackup">导入打卡</button><input type="file" id="ckImportFile" accept=".json,application/json" style="display:none">
+    </div>
+  </details>
+</div>
+</div>
+</div>
+<div class="month-pop" id="monthPop" style="display:none"><div class="cal-head"><button type="button" class="cal-nav" id="mpYPrev">‹</button><div class="cal-title" id="mpYTitle"></div><button type="button" class="cal-nav" id="mpYNext">›</button></div><div class="month-grid" id="monthGrid"></div></div>
+<div class="month-pop" id="yearPop" style="display:none"><div class="cal-title" style="text-align:center;margin-bottom:10px">Year</div><div class="month-grid" id="yearGrid"></div></div>
+<script>
+
+const QUOTES=[
+["We write to taste life twice, in the moment and in retrospect.","Anaïs Nin"],
+["How we spend our days is, of course, how we spend our lives.","Annie Dillard"],
+["Tell me, what is it you plan to do with your one wild and precious life?","Mary Oliver"],
+["Pay attention. Be astonished. Tell about it.","Mary Oliver"],
+["Do the best you can until you know better. Then when you know better, do better.","Maya Angelou"],
+["Start where you are. Use what you have. Do what you can.","Arthur Ashe"],
+["It always seems impossible until it's done.","Nelson Mandela"],
+["When you want something, all the universe conspires in helping you to achieve it.","Paulo Coelho"],
+["The best way out is always through.","Robert Frost"],
+["You are braver than you believe, stronger than you seem, and smarter than you think.","A.A. Milne"],
+["Don't watch the clock; do what it does. Keep going.","Sam Levenson"],
+["Success is the sum of small efforts, repeated day in and day out.","Robert Collier"],
+["Smile, breathe, and go slowly.","Thich Nhat Hanh"],
+["You are the sky. Everything else is just the weather.","Pema Chödrön"],
+["Do your little bit of good where you are; it's those little bits of good put together that overwhelm the world.","Desmond Tutu"],
+["Embrace the glorious mess that you are.","Elizabeth Gilbert"],
+["Almost everything will work again if you unplug it for a few minutes, including you.","Anne Lamott"],
+["Courage starts with showing up and letting ourselves be seen.","Brené Brown"],
+["What you do makes a difference, and you have to decide what kind of difference you want to make.","Jane Goodall"],
+["The more you praise and celebrate your life, the more there is in life to celebrate.","Oprah Winfrey"],
+["Slow down and everything you are chasing will come around and catch you.","John De Graaf"]
+];
+function renderQuote(dateStr){
+  let el=document.getElementById("quoteBox"); if(!el) return;
+  if(typeof data!=="undefined" && data.customQuote && data.customQuote.text){
+    el.innerHTML="\u201C"+data.customQuote.text+"\u201D <span>\u2014 "+(data.customQuote.author||"")+"</span>"; return;
+  }
+  let day=Math.floor(Date.parse(dateStr+"T00:00:00Z")/86400000);
+  let q=QUOTES[((day%QUOTES.length)+QUOTES.length)%QUOTES.length];
+  el.innerHTML="\u201C"+q[0]+"\u201D <span>\u2014 "+q[1]+"</span>";
+}
+let editingQuote=false;
+const ICON_COPY=`<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`, ICON_EDIT=`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>`, ICON_CHECK=`<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>`, ICON_X=`<svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+function exitQuoteEdit(){
+  editingQuote=false;
+  document.getElementById("copyQuoteBtn").innerHTML=ICON_COPY; document.getElementById("copyQuoteBtn").title=t("copyQuote");
+  document.getElementById("editQuoteBtn").innerHTML=ICON_EDIT; document.getElementById("editQuoteBtn").title=t("editQuote");
+  renderQuote(date.value);
+}
+document.getElementById("copyQuoteBtn").onclick=async()=>{
+  if(editingQuote){ exitQuoteEdit(); return; }
+  let text=document.getElementById("quoteBox").textContent.trim();
+  try{ await navigator.clipboard.writeText(text); }catch(e){
+    let ta=document.createElement("textarea"); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove();
+  }
+  let btn=document.getElementById("copyQuoteBtn"); btn.innerHTML=ICON_CHECK; setTimeout(()=>{if(!editingQuote) btn.innerHTML=ICON_COPY;},1500);
+};
+document.getElementById("editQuoteBtn").onclick=()=>{
+  if(editingQuote){
+    let qt=document.getElementById("quoteTextInput"), qa=document.getElementById("quoteAuthorInput");
+    let text=qt?qt.value.trim():"", author=qa?qa.value.trim():"";
+    if(!text){ exitQuoteEdit(); return; }
+    data.customQuote={text:text,author:author}; save();
+    exitQuoteEdit(); return;
+  }
+  let cur=document.getElementById("quoteBox").textContent.trim();
+  let parts=cur.split("\u2014"); let curText=parts[0].trim().replace(/^\u201C/,"").replace(/\u201D$/,"").trim(), curAuthor=parts.length>1?parts[1].trim():"";
+  let el=document.getElementById("quoteBox");
+  el.innerHTML='<input id="quoteTextInput" value=""><input id="quoteAuthorInput" value="" placeholder="'+t("author")+'" style="margin-top:8px">';
+  document.getElementById("quoteTextInput").value=curText; document.getElementById("quoteAuthorInput").value=curAuthor;
+  editingQuote=true;
+  document.getElementById("copyQuoteBtn").innerHTML=ICON_X; document.getElementById("copyQuoteBtn").title=t("cancel");
+  document.getElementById("editQuoteBtn").innerHTML=ICON_CHECK; document.getElementById("editQuoteBtn").title=t("save");
+  document.getElementById("quoteTextInput").focus();
+  document.getElementById("quoteAuthorInput").addEventListener("keydown",e=>{if(e.key==="Enter") document.getElementById("editQuoteBtn").click(); if(e.key==="Escape") exitQuoteEdit();});
+  document.getElementById("quoteTextInput").addEventListener("keydown",e=>{if(e.key==="Escape") exitQuoteEdit();});
+};
+// Template starts with no preset categories — user adds their own via + below.
+// Demo categories are brighter than the old muted pastels and are only loaded by Load demo.
+const DEMO_CATS={
+  reading:{name:"Reading",color:"#7b9ba6",bg:"#E7EDEF"},
+  obsidian:{name:"Obsidian Notes",color:"#8a9a86",bg:"#EAEDE9"},
+  study:{name:"Study",color:"#9b8d9f",bg:"#EDEAEE"},
+  work:{name:"Work",color:"#c29f82",bg:"#F4EEE9"},
+  sport:{name:"Sport",color:"#c78983",bg:"#F5EAE9"},
+  life:{name:"Life",color:"#d4b376",bg:"#F7F1E6"},
+  rest:{name:"Rest",color:"#9a968e",bg:"#EDECEB"}
+};
+let CATS={};
+function loadCats(){
+  try{let raw=localStorage.getItem("diary-v1-categories"); CATS=raw?JSON.parse(raw):{};}catch(e){CATS={};}
+  let map={"#2F7FC4":["#7b9ba6","#E7EDEF"],"#2E9E6B":["#8a9a86","#EAEDE9"],"#7D5BD6":["#9b8d9f","#EDEAEE"],"#E67E22":["#c29f82","#F4EEE9"],"#E74C3C":["#c78983","#F5EAE9"],"#D4A017":["#d4b376","#F7F1E6"],"#6B7C93":["#9a968e","#EDECEB"]};
+  let changed=false;
+  Object.keys(CATS).forEach(k=>{let c=CATS[k]; if(c&&map[c.color]){c.color=map[c.color][0]; c.bg=map[c.color][1]; changed=true;}});
+  if(changed){ try{localStorage.setItem("diary-v1-categories",JSON.stringify(CATS));}catch(e){} }
+}
+// ============ P0 helpers ============
+// Task 2: central storage writer — storage errors are NEVER swallowed silently.
+// Returns true on success, false on failure (alerts the user once per session).
+let storageFailed=false;
+let saveStatusTimer=null;
+function timeHM(){let d=new Date();let p=n=>String(n).padStart(2,"0");return p(d.getHours())+":"+p(d.getMinutes());}
+function setSaveStatus(state){
+  // state: "saving" | "saved" | "failed" — 轻量状态显示，不弹窗
+  let el=document.getElementById("saveStatus");
+  if(!el) return;
+  el.dataset.st=state;
+  if(state==="saved"){el.textContent=t("autosavedAt",{time:timeHM()});el.style.color="";}
+  else if(state==="failed"){el.textContent=t("saveFailedShort");el.style.color="#F0A8A8";}
+  else{el.textContent=t("saving");el.style.color="";}
+}
+function storeSet(k,v){
+  setSaveStatus("saving");
+  try{localStorage.setItem(k,v);}
+  catch(e){
+    clearTimeout(saveStatusTimer);
+    setSaveStatus("failed");
+    if(!storageFailed){storageFailed=true;try{alert(t("storageFail"));}catch(_){}}
+    return false;
+  }
+  clearTimeout(saveStatusTimer);
+  saveStatusTimer=setTimeout(()=>{let el=document.getElementById("saveStatus");if(el&&el.dataset.st!=="failed")setSaveStatus("saved");},700);
+  return true;
+}
+// Task 3: local calendar date (YYYY-MM-DD). Never derive the date from UTC.
+function todayLocal(){
+  let d=new Date();
+  let m=String(d.getMonth()+1).padStart(2,"0");
+  let day=String(d.getDate()).padStart(2,"0");
+  return d.getFullYear()+"-"+m+"-"+day;
+}
+// ============ end P0 helpers ============
+function saveCats(){storeSet("diary-v1-categories",JSON.stringify(CATS));}
+function hexToBg(hex){
+  let h=hex.replace("#",""); let r=parseInt(h.slice(0,2),16), g=parseInt(h.slice(2,4),16), b=parseInt(h.slice(4,6),16);
+  let mix=v=>Math.round(v*0.18+255*0.82);
+  return "#"+[mix(r),mix(g),mix(b)].map(v=>v.toString(16).padStart(2,"0")).join("");
+}
+let selectedCat=null;
+function renderCatOptions(selected){
+  if(selected && CATS[selected]) selectedCat=selected;
+  else if(!selectedCat || !CATS[selectedCat]){let keys=Object.keys(CATS); selectedCat=keys.length?keys[0]:null;}
+  let menu=document.getElementById("catMenu"); menu.innerHTML="";
+  Object.entries(CATS).forEach(([k,v])=>{
+    let item=document.createElement("div"); item.className="cat-item";
+    item.innerHTML=`<span class="cat-dot" style="background:${v.color}"></span><span>${v.name}</span>`;
+    item.onclick=(e)=>{e.stopPropagation(); selectedCat=k; updateCatButton(); menu.style.display="none"; hideCatForm();};
+    menu.appendChild(item);
+  });
+  let add=document.createElement("div"); add.className="cat-item add";
+  add.innerHTML=`<span class="cat-dot" style="background:transparent;border:none"></span><span>${t("addCategoryMenu")}</span>`;
+  add.onclick=(e)=>{e.stopPropagation(); menu.style.display="none"; openCatForm(false);};
+  menu.appendChild(add);
+  updateCatButton();
+}
+function updateCatButton(){
+  let dot=document.getElementById("catDot"), label=document.getElementById("catLabel");
+  if(selectedCat && CATS[selectedCat]){dot.style.display="block"; dot.style.background=CATS[selectedCat].color; label.textContent=CATS[selectedCat].name;}
+  else{dot.style.display="none"; label.textContent=t("selectCategory");}
+}
+document.addEventListener("click",e=>{let dd=document.getElementById("catDropdown"); if(dd && !dd.contains(e.target)) document.getElementById("catMenu").style.display="none";});
+function openCatForm(editing){
+  let form=document.getElementById("catForm"); form.style.display="block";
+  if(editing && selectedCat && CATS[selectedCat]){
+    document.getElementById("catName").value=CATS[selectedCat].name;
+    document.getElementById("catColor").value=CATS[selectedCat].color;
+    document.getElementById("catSaveBtn").textContent=t("saveColour");
+  } else {
+    document.getElementById("catName").value=""; document.getElementById("catColor").value="#8a9a86";
+    document.getElementById("catSaveBtn").textContent=t("addCategory");
+  }
+  document.getElementById("catName").focus();
+}
+function hideCatForm(){
+  document.getElementById("catForm").style.display="none";
+}
+const SLOT=34;
+let data={appointment:"",mood:"",done:[],meals:{B:"",L:"",D:"",S:""},mealsList:[],acts:[],people:[],spending:"",spendingList:[],diary:"",notesList:[],events:[]};
+function times(){let a=[];for(let h=0;h<24;h++)for(let m of [0,30])a.push(String(h).padStart(2,"0")+":"+String(m).padStart(2,"0"));return a;}
+function timeIndex(t){let[h,m]=t.split(":").map(Number);return h*2+m/30;}
+function key(){return "diary-v1-"+document.getElementById("date").value;}
+function save(){
+  data.meals={B:mealB.value,L:mealL.value,D:mealD.value,S:mealS.value};
+  data.mealsList=["B","L","D","S"].filter(t=>data.meals[t]).map(t=>({type:t,food:data.meals[t]}));
+  if(!data.spendingList) data.spendingList=[];
+  data.spending=data.spendingList.map(e=>e.cat+(e.amt!==""&&e.amt!=null?" "+e.amt:"")).join("\n");
+  if(!data.notesList) data.notesList=[];
+  data.diary=data.notesList.map(e=>e.text).join("\n");
+  storeSet(key(),JSON.stringify(data));
+}
+function load(){
+  let raw=localStorage.getItem(key());
+  data=raw?JSON.parse(raw):{appointment:"",mood:"",done:[],meals:{B:"",L:"",D:"",S:""},mealsList:[],acts:[],people:[],spending:"",spendingList:[],diary:"",notesList:[],events:[]};
+  if(!data.meals || (!data.meals.B && !data.meals.L && !data.meals.D && !data.meals.S)){
+    if(data.mealsList && data.mealsList.length){
+      data.meals={B:"",L:"",D:"",S:""};
+      data.mealsList.forEach(e=>{if(!data.meals[e.type]) data.meals[e.type]=e.food;});
+    }
+  }
+  if(!data.meals) data.meals={B:"",L:"",D:"",S:""};
+  if(!data.notesList){
+    if(typeof data.diary==="string" && data.diary.trim()) data.notesList=data.diary.split("\n").filter(t=>t.trim()).map(t=>({text:t.trim()}));
+    else data.notesList=[];
+  }
+  if(!data.spendingList){
+    if(typeof data.spending==="string" && data.spending.trim()){
+      data.spendingList=data.spending.split("\n").map(line=>{let m=line.trim().match(/^(.*?)\s+([\d.]+)$/); return m?{cat:m[1],amt:Number(m[2])}:{cat:line.trim(),amt:""};}).filter(e=>e.cat);
+    } else data.spendingList=[];
+  }
+  if(!data.people)data.people=[];
+  mealB.value=data.meals.B||""; mealL.value=data.meals.L||""; mealD.value=data.meals.D||""; mealS.value=data.meals.S||"";
+  renderNotes(); renderSpending();
+  renderList("doneList",data.done); renderList("actList",data.acts); renderPeople(); renderTimeline(); renderQuote(date.value); applyDayTheme();
+}
+function renderList(elId,arr){
+  let ul=document.getElementById(elId); ul.innerHTML="";
+  arr.forEach((it,i)=>{
+    let li=document.createElement("li"); if(it.checked)li.className="done";
+    li.innerHTML=`<input type="checkbox" ${it.checked?"checked":""}><span>${it.text}</span><button title="${t('delete')}">×</button>`;
+    li.querySelector("input").onchange=e=>{it.checked=e.target.checked;li.className=it.checked?"done":"";save();};
+    li.querySelector("button").onclick=()=>{arr.splice(i,1);save();renderList(elId,arr);};
+    ul.appendChild(li);
+  });
+}
+function addItem(listId,inputId){
+  let inp=document.getElementById(inputId); if(!inp.value.trim())return;
+  let arr=listId==="doneList"?data.done:data.acts; arr.push({text:inp.value.trim(),checked:false}); inp.value=""; save(); renderList(listId,arr);
+}
+function circleLabel(c){
+  if(c==="Class Committee") return t("circleClass");
+  if(c==="Volunteer Group") return t("circleVolunteer");
+  if(c==="Press Team") return t("circlePress");
+  if(c==="Other") return t("circleOther");
+  return c;
+}
+function renderPeople(){
+  let ul=document.getElementById("peopleList"); ul.innerHTML="";
+  data.people.forEach((p,i)=>{
+    let li=document.createElement("li");
+    li.innerHTML=`<span><strong>${p.name}</strong> · ${circleLabel(p.circle)} · ${p.note}</span><button title="${t('delete')}">×</button>`;
+    li.querySelector("button").onclick=()=>{data.people.splice(i,1);save();renderPeople();};
+    ul.appendChild(li);
+  });
+}
+function addPerson(){
+  let name=pName.value.trim(); if(!name){alert(t("typeName"));return;}
+  data.people.push({name:name,circle:pCircle.value,note:pNote.value.trim()});
+  pName.value=""; pNote.value=""; save(); renderPeople();
+}
+function renderNotes(){
+  let ul=document.getElementById("notesList"); ul.innerHTML="";
+  (data.notesList||[]).forEach((e,i)=>{
+    let li=document.createElement("li");
+    li.innerHTML=`<span>${e.text}</span><button title="${t('delete')}">×</button>`;
+    li.querySelector("button").onclick=()=>{data.notesList.splice(i,1);save();renderNotes();};
+    ul.appendChild(li);
+  });
+}
+function addNote(){
+  let text=newNote.value.trim(); if(!text) return;
+  if(!data.notesList) data.notesList=[];
+  data.notesList.push({text:text});
+  newNote.value=""; save(); renderNotes(); newNote.focus();
+}
+function renderSpending(){
+  let ul=document.getElementById("spendingList"); ul.innerHTML="";
+  (data.spendingList||[]).forEach((e,i)=>{
+    let li=document.createElement("li");
+    li.innerHTML=`<span class="sp-cat">${e.cat}</span><span class="sp-amt">${e.amt!==""&&e.amt!=null?e.amt:""}</span><button title="${t('delete')}">×</button>`;
+    li.querySelector("button").onclick=()=>{data.spendingList.splice(i,1);save();renderSpending();};
+    ul.appendChild(li);
+  });
+  let total=(data.spendingList||[]).reduce((sum,e)=>sum+(Number(e.amt)||0),0);
+  document.getElementById("spendingTotal").textContent=total?(t("total")+": "+(Number.isInteger(total)?total:parseFloat(total.toFixed(2)))):"";
+}
+function addSpending(){
+  let cat=spendingCat.value.trim(); if(!cat){alert(t("typeCategory"));spendingCat.focus();return;}
+  let amtStr=spendingAmt.value.trim(); if(amtStr===""||isNaN(Number(amtStr))){alert(t("typeAmount"));spendingAmt.focus();return;}
+  if(!data.spendingList) data.spendingList=[];
+  data.spendingList.push({cat:cat,amt:Number(amtStr)});
+  spendingCat.value=""; spendingAmt.value=""; save(); renderSpending(); spendingCat.focus();
+}
+function renderTimeline(){
+  let box=document.getElementById("timeline"); box.innerHTML="";
+  times().forEach(t=>{let d=document.createElement("div"); d.className="slot"; d.innerHTML=`<span>${t}</span>`; box.appendChild(d);});
+  // Side-by-side columns for overlapping events (max 2 at the same time): greedy colouring by start time
+  let evEndMin=ev=>timeToMin(ev.end||endFrom(ev.start,ev.dur));
+  let sorted=data.events.slice().sort((a,b)=>timeIndex(a.start)-timeIndex(b.start));
+  let colOf=new Map();
+  sorted.forEach(ev=>{
+    let used=new Set();
+    sorted.forEach(o=>{if(o!==ev && timeToMin(o.start)<evEndMin(ev) && timeToMin(ev.start)<evEndMin(o) && colOf.has(o)) used.add(colOf.get(o));});
+    let c=0; while(used.has(c)) c++; colOf.set(ev,c);
+  });
+  data.events.forEach((ev,i)=>{
+    let overlap=data.events.filter(o=>timeToMin(o.start)<evEndMin(ev) && timeToMin(ev.start)<evEndMin(o));
+    let total=Math.max(...overlap.map(o=>colOf.get(o)+1));
+    let col=colOf.get(ev);
+    let c=CATS[ev.cat]||{name:ev.cat,color:"#8a9a86",bg:"#EAEDE9"}; let el=document.createElement("div"); el.className="event";
+    el.style.top=(timeIndex(ev.start)*SLOT+4)+"px"; el.style.height=(ev.dur/30*SLOT-8)+"px";
+    el.style.background=c.bg; el.style.borderLeftColor=c.color; el.style.color="#3E3630";
+    if(total>1){
+      let usable=box.clientWidth>0?box.clientWidth-20:600;
+      let gap=6, w=(usable-(total-1)*gap)/total, left=10+col*(w+gap);
+      el.style.left=left+"px"; el.style.width=w+"px"; el.style.right="auto";
+    }
+    el.innerHTML=`<button title="${t('delete')}">×</button><strong>${c.name}</strong><p>${ev.start}–${ev.end||endFrom(ev.start,ev.dur)}${ev.desc?" · "+ev.desc:""}</p>`;
+    let st=el.querySelector("strong"); if(st) st.style.color=c.color;
+    el.querySelector("button").onclick=()=>{data.events.splice(i,1);save();renderTimeline();};
+    box.appendChild(el);
+  });
+}
+function addEvent(){
+  let start=evTime.value, end=evEnd.value, dur=Number(evDur.value)||0, cat=selectedCat, desc=evDesc.value.trim();
+  if(!cat || !CATS[cat]){alert(t("addCatFirst")); openCatForm(false); return;}
+  if(!start || !end || dur<=0 || timeToMin(end)<=timeToMin(start)){alert(t("endAfterStart"));return;}
+  let overlapping=data.events.filter(ev=>{let es=timeToMin(ev.start), ee=timeToMin(ev.end||endFrom(ev.start,ev.dur)); return timeToMin(start)<ee && es<timeToMin(end);});
+  if(overlapping.length>=2){alert(t("max2"));return;}
+  data.events.push({start,end,dur,cat,desc}); data.events.sort((a,b)=>timeIndex(a.start)-timeIndex(b.start));
+  evDesc.value=""; save(); renderTimeline();
+}
+function obsidianMarkdown(){
+  let d=document.getElementById("date").value;
+  let lines=["# People — "+d,""];
+  if(data.people.length===0) lines.push("- (no one recorded today)");
+  data.people.forEach(p=>lines.push(`- [[${p.name}]] · ${p.circle} · ${p.note}`));
+  lines.push("","## From diary","- Date: [["+d+"]]");
+  if(data.diary) lines.push("- Note: "+data.diary);
+  return lines.join("\n");
+}
+function download(name,text,type){
+  let blob=new Blob([text],{type:type||"text/plain"}); let a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download=name; a.click(); URL.revokeObjectURL(a.href);
+}
+document.getElementById("loadDemo").onclick=()=>{
+  let hasData=data.appointment||data.done.length||data.acts.length||data.people.length||data.events.length||data.spending||(data.meals&&(data.meals.B||data.meals.L||data.meals.D||data.meals.S))||(data.notesList&&data.notesList.length)||(habits&&habits.length)||(books&&books.length)||(revData&&revData.months&&Object.keys(revData.months).length)||(monthData&&monthData.marks&&Object.keys(monthData.marks).length);
+  if(hasData && !confirm(t("loadDemoConfirm"))) return;
+  CATS=JSON.parse(JSON.stringify(DEMO_CATS)); saveCats(); renderCatOptions("reading");
+  data={appointment:"Therapy session - 10AM",
+    done:[{text:"Drive Your Plow (p1-60)",checked:true},{text:"Therapy session",checked:true},{text:"January review",checked:true}],
+    meals:{B:"Coffee",L:"chilli + rice dumpling",D:"khao soi",S:"persimmon, mango sticky rice"},
+    mealsList:[{type:"B",food:"Coffee"},{type:"L",food:"chilli + rice dumpling"},{type:"D",food:"khao soi"},{type:"S",food:"persimmon, mango sticky rice"}],
+    acts:[{text:"Stationery shopping at Paper Plus Cloth",checked:true}],
+    people:[{name:"袁悦",circle:"Press Team",note:"talked about rota"}],
+    spending:"Coffee 25",spendingList:[{cat:"Coffee",amt:25}],diary:"30-min slots feel much looser than 15-min.",notesList:[{text:"30-min slots feel much looser than 15-min."}],
+    events:[{start:"09:00",dur:60,cat:"reading",desc:"Morning reading"},{start:"14:00",dur:60,cat:"study",desc:"UI design course"},{start:"15:30",dur:60,cat:"work",desc:"Team sync"}]};
+  save(); load();
+  habits=[{id:"h1",name:"Read 30 min"},{id:"h2",name:"Exercise 20 min"},{id:"h3",name:"Drink 8 cups of water"}];
+  saveHabits();
+  monthData={theme:themeForMonth(viewY,viewM),marks:{h1:{5:"heart",6:"heart",7:"heart",8:"heart",9:"heart",10:"heart",11:"heart"},h2:{6:"check",8:"check",10:"check"},h3:{5:"fill",6:"fill",7:"fill",8:"fill",9:"fill",10:"fill",11:"fill"}}};
+  saveMonth(); renderAll();
+  mpY=2026; mpM=11;
+  mpSave({days:{1:"Focus on building the diary app",12:"Therapy session 10AM",15:"Deadline for UI",20:"Dentist"}});
+  mpRender();
+  books=[{id:Date.now()+1,bought:"2026-11-01",title:"Drive Your Plow",author:"Olga Tokarczuk",rating:5,comment:"Amazing!",finished:"Yes"},{id:Date.now()+2,bought:"2026-11-10",title:"Atomic Habits",author:"James Clear",rating:4,comment:"Practical",finished:"No"}];
+  booksSave(); booksRender();
+  revData={cols:["总结"],months:{1:"Started learning UI design and set up this Obsidian workflow.",2:"Read 3 books and kept up with daily journaling."},overall:""};
+  revSave(); revRender();
+};
+document.getElementById("templateBtn").onclick=()=>{
+  if(!confirm(t("templateConfirm"))) return;
+  localStorage.removeItem(key());
+  CATS={}; saveCats(); renderCatOptions();
+  load();
+};
+document.getElementById("exportBtn").onclick=()=>{
+  save(); let out={};
+  for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i); if(k && k.startsWith("diary-v1-")) out[k]=localStorage.getItem(k);}
+  if(Object.keys(out).length===0){alert(t("nothingExport"));return;}
+  download("diary-backup-"+todayLocal()+".json",JSON.stringify(out,null,2),"application/json");
+};
+document.getElementById("importBtn").onclick=()=>document.getElementById("importFile").click();
+document.getElementById("importFile").onchange=(e)=>{
+  let f=e.target.files[0]; if(!f)return; let r=new FileReader();
+  r.onload=()=>{try{let obj=JSON.parse(r.result); let n=0; Object.keys(obj).forEach(k=>{if(k.startsWith("diary-v1-")) n++;}); if(n===0){alert(t("notBackup"));return;} if(!confirm(t("importConfirm",{n:n})))return; Object.entries(obj).forEach(([k,v])=>{if(k.startsWith("diary-v1-")){storeSet(k,typeof v==="string"?v:JSON.stringify(v));}}); alert(t("imported",{n:n})); loadCats(); renderCatOptions(); load();}catch(err){alert(t("notBackup"));}};
+  r.readAsText(f); e.target.value="";
+};
+
+// ============ P0 Task 1: unified full backup & restore ============
+const BACKUP_VERSION=1;
+function collectBackup(){
+  let d={diary:{},checkin:{},monthplan:{},books:{},review:{},prefs:{}};
+  for(let i=0;i<localStorage.length;i++){
+    let k=localStorage.key(i); if(!k) continue;
+    let v=null; try{v=localStorage.getItem(k);}catch(e){continue;}
+    if(v===null||v===undefined) continue;
+    if(k.startsWith("diary-v1-")) d.diary[k]=v;
+    else if(k.startsWith("checkin-v1-")) d.checkin[k]=v;
+    else if(k.startsWith("monthplan-v1-")) d.monthplan[k]=v;
+    else if(k.startsWith("review-v1-")) d.review[k]=v;
+    else if(k==="books-v1-list") d.books[k]=v;
+    else if(k==="diary-lang") d.prefs[k]=v;
+  }
+  return d;
+}
+function backupCounts(d){
+  let c={diary:0,checkin:0,monthplan:0,books:0,review:0};
+  try{
+    c.diary=Object.keys(d.diary||{}).filter(k=>/^diary-v1-\d{4}-\d{2}-\d{2}$/.test(k)).length;
+    c.checkin=Object.keys(d.checkin||{}).filter(k=>/^checkin-v1-\d{4}-\d{2}$/.test(k)).length;
+    c.monthplan=Object.keys(d.monthplan||{}).length;
+    c.review=Object.keys(d.review||{}).length;
+    let b=JSON.parse((d.books||{})["books-v1-list"]||"[]");
+    c.books=Array.isArray(b)?b.length:0;
+  }catch(e){}
+  return c;
+}
+function fmtExportTime(iso){
+  try{let d=new Date(iso); if(isNaN(d.getTime())) return String(iso);
+    let p=n=>String(n).padStart(2,"0");
+    return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes());
+  }catch(e){return String(iso);}
+}
+document.getElementById("fullExportBtn").onclick=()=>{
+  let data=collectBackup();
+  let counts=backupCounts(data);
+  let total=counts.diary+counts.checkin+counts.monthplan+counts.books+counts.review;
+  if(total===0&&Object.keys(data.prefs).length===0){alert(t("backupEmpty"));return;}
+  let out={format:"muse-diary-backup",version:BACKUP_VERSION,exportedAt:new Date().toISOString(),counts:counts,data:data};
+  download("diary-full-backup-"+todayLocal()+".json",JSON.stringify(out,null,2),"application/json");
+};
+// P0-R2: 本应用允许的 localStorage 键（恢复时只写这些，绝不写任意键）
+function isAppKey(k){
+  return typeof k==="string"&&(k.startsWith("diary-v1-")||k.startsWith("checkin-v1-")||k.startsWith("monthplan-v1-")||k.startsWith("review-v1-")||k==="books-v1-list"||k==="diary-lang");
+}
+// 每个分组只允许自己对应的键，且值必须为字符串（备份由 collectBackup 生成，值恒为字符串）
+const GROUP_KEY_RULES={
+  diary:k=>k.startsWith("diary-v1-"),
+  checkin:k=>k.startsWith("checkin-v1-"),
+  monthplan:k=>k.startsWith("monthplan-v1-"),
+  review:k=>k.startsWith("review-v1-"),
+  books:k=>k==="books-v1-list",
+  prefs:k=>k==="diary-lang"
+};
+function validateBackupData(data){
+  if(!data||typeof data!=="object"||Array.isArray(data)) return {ok:false};
+  for(const g of Object.keys(GROUP_KEY_RULES)){
+    const o=data[g];
+    if(o===undefined) continue;
+    if(!o||typeof o!=="object"||Array.isArray(o)) return {ok:false};
+    const rule=GROUP_KEY_RULES[g];
+    for(const k of Object.keys(o)){
+      if(!rule(k)||typeof o[k]!=="string") return {ok:false,badKey:k};
+    }
+  }
+  return {ok:true};
+}
+function validateBackup(obj){
+  if(!obj||typeof obj!=="object"||Array.isArray(obj)) return {ok:false,reason:"corrupt"};
+  if(obj.format!=="muse-diary-backup"||!obj.data||typeof obj.data!=="object") return {ok:false,reason:"notours"};
+  if(typeof obj.version!=="number") return {ok:false,reason:"notours"};
+  if(obj.version>BACKUP_VERSION) return {ok:false,reason:"newversion",have:obj.version};
+  let dc=validateBackupData(obj.data);
+  if(!dc.ok) return {ok:false,reason:"badcontent",badKey:dc.badKey};
+  return {ok:true,bk:obj};
+}
+function refreshAllViews(){
+  try{loadCats();}catch(e){}
+  try{renderCatOptions();}catch(e){}
+  try{load();}catch(e){}
+  try{loadHabits();}catch(e){}
+  try{loadMonth();}catch(e){}
+  try{renderAll();}catch(e){}
+  try{mpRender();}catch(e){}
+  try{booksLoad();booksRender();}catch(e){}
+  try{revRender();}catch(e){}
+  try{updatePager();}catch(e){}
+  try{let lang=null;try{lang=localStorage.getItem("diary-lang");}catch(e){}
+    if(lang&&LANGS[lang]) applyLang(lang);}catch(e){}
+}
+document.getElementById("fullImportBtn").onclick=()=>document.getElementById("fullImportFile").click();
+// P0-R2: 三选一恢复弹窗（覆盖 / 合并 / 取消），取消不修改任何数据
+function showRestoreDialog(time,counts,onChoice){
+  let done=false;
+  const num=x=>{let n=Number(x);return (Number.isFinite(n)&&n>=0)?Math.floor(n):0;};
+  const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  let ov=document.createElement("div");
+  ov.id="restoreModalOv";
+  ov.style.cssText="position:fixed;inset:0;background:rgba(62,54,48,.45);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;box-sizing:border-box;";
+  const finish=c=>{if(done)return;done=true;document.removeEventListener("keydown",onKey);if(ov.parentNode)ov.parentNode.removeChild(ov);onChoice(c);};
+  const onKey=e=>{if(e.key==="Escape")finish("cancel");};
+  ov.addEventListener("mousedown",e=>{if(e.target===ov)finish("cancel");});
+  let box=document.createElement("div");
+  box.className="card";
+  box.style.cssText="max-width:540px;width:100%;margin:0;max-height:86vh;overflow:auto;";
+  let summary=t("restoreSummary",{time:time,diary:num(counts.diary),checkin:num(counts.checkin),monthplan:num(counts.monthplan),books:num(counts.books),review:num(counts.review)});
+  let html='<h3 style="margin:0 0 8px;font-size:17px;">'+esc(t("restoreTitle"))+'</h3>';
+  summary.split("\n").forEach(ln=>{html+='<p style="margin:3px 0;font-size:14px;">'+esc(ln)+'</p>';});
+  html+='<div style="display:flex;gap:10px;align-items:flex-start;margin-top:14px;">'
+    +'<button id="restoreBtnOverwrite" class="ghost" style="flex:0 0 auto;color:#B03A2E;border-color:#D8AFA9;">'+esc(t("restoreOverwrite"))+'</button>'
+    +'<div style="font-size:13px;color:#6B5D52;line-height:1.7;">'+esc(t("restoreOverwriteDesc"))+'</div></div>';
+  html+='<div style="display:flex;gap:10px;align-items:flex-start;margin-top:10px;">'
+    +'<button id="restoreBtnMerge" class="primary" style="flex:0 0 auto;">'+esc(t("restoreMerge"))+'</button>'
+    +'<div style="font-size:13px;color:#6B5D52;line-height:1.7;">'+esc(t("restoreMergeDesc"))+'</div></div>';
+  html+='<div style="margin-top:14px;text-align:right;">'
+    +'<button id="restoreBtnCancel" class="ghost">'+esc(t("restoreCancel"))+'</button></div>';
+  box.innerHTML=html;
+  box.querySelector("#restoreBtnOverwrite").addEventListener("click",()=>finish("overwrite"));
+  box.querySelector("#restoreBtnMerge").addEventListener("click",()=>finish("merge"));
+  box.querySelector("#restoreBtnCancel").addEventListener("click",()=>finish("cancel"));
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  document.addEventListener("keydown",onKey);
+}
+// 覆盖前先对当前应用数据做临时快照；写入失败则回滚快照
+function snapshotAppData(){
+  let snap={};
+  try{for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);
+    if(isAppKey(k)){try{snap[k]=localStorage.getItem(k);}catch(e){}}}}catch(e){}
+  return snap;
+}
+function doRestore(bk,mode){
+  let groups=bk.data, n=0, writeFails=0;
+  const writeOne=(k,val)=>{ if(storeSet(k,val)) n++; else writeFails++; };
+  const groupNames=["diary","checkin","monthplan","books","review","prefs"];
+  if(mode==="overwrite"){
+    let snap=snapshotAppData();
+    let del=[];
+    try{for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(isAppKey(k))del.push(k);}}catch(e){}
+    del.forEach(k=>{try{localStorage.removeItem(k);}catch(e){}});
+    groupNames.forEach(g=>{Object.entries(groups[g]||{}).forEach(([k,val])=>writeOne(k,val));});
+    if(writeFails>0){
+      // 回滚：清掉已写入的残缺数据，恢复快照
+      let del2=[];
+      try{for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i);if(isAppKey(k))del2.push(k);}}catch(e){}
+      del2.forEach(k=>{try{localStorage.removeItem(k);}catch(e){}});
+      let rbFails=0;
+      Object.entries(snap).forEach(([k,val])=>{if(!storeSet(k,val))rbFails++;});
+      if(rbFails>0) alert(t("restoreRollbackFail"));
+      else alert(t("restoreFailedRollback",{n:writeFails}));
+    }else{
+      alert(t("backupDoneReplace",{n:n}));
+    }
+  }else{
+    // 合并：只补充本地不存在的键；已存在的日期/月份整条保留，不逐项合并
+    groupNames.forEach(g=>{Object.entries(groups[g]||{}).forEach(([k,val])=>{
+      let cur=null; try{cur=localStorage.getItem(k);}catch(e){}
+      if(cur===null) writeOne(k,val);
+    });});
+    if(writeFails>0) alert(t("restoreFailed",{n:writeFails}));
+    else alert(t("backupDoneMerge",{n:n}));
+  }
+  refreshAllViews();
+}
+document.getElementById("fullImportFile").onchange=e=>{
+  let f=e.target.files[0]; if(!f) return; let r=new FileReader();
+  r.onload=()=>{
+    let obj=null;
+    try{obj=JSON.parse(r.result);}catch(err){alert(t("backupCorrupt"));return;}
+    let v=validateBackup(obj);
+    if(!v.ok){
+      if(v.reason==="newversion") alert(t("backupVersionNew",{have:v.have,want:BACKUP_VERSION}));
+      else if(v.reason==="notours") alert(t("backupNotOurs"));
+      else if(v.reason==="badcontent") alert(t("backupBadContent"));
+      else alert(t("backupCorrupt"));
+      return;
+    }
+    let bk=v.bk;
+    let counts=bk.counts||backupCounts(bk.data);
+    let time=bk.exportedAt?fmtExportTime(bk.exportedAt):"?";
+    showRestoreDialog(time,counts,choice=>{
+      if(choice==="cancel") return;   // 取消：不修改任何数据
+      doRestore(bk,choice);
+    });
+  };
+  r.readAsText(f); e.target.value="";
+};
+// ============ end P0 Task 1 ============
+document.getElementById("obsidianBtn").onclick=async()=>{
+  save(); let md=obsidianMarkdown(); let d=document.getElementById("date").value;
+  // Try direct write to an Obsidian vault folder (Chrome, Windows). Falls back to download.
+  try{
+    if(window.showDirectoryPicker){
+      let dir=await window.showDirectoryPicker();
+      let file=await dir.getFileHandle(d+"-people.md",{create:true});
+      let w=await file.createWritable(); await w.write(md); await w.close();
+      alert(t("obsidianSaved",{name:d+"-people.md"})); return;
+    }
+  }catch(err){ /* user cancelled or not supported -> download below */ }
+  download(d+"-people.md",md,"text/markdown");
+};
+
+["mealB","mealL","mealD","mealS"].forEach(id=>document.getElementById(id).addEventListener("input",save));
+// Enter to save, like the Done timeline note: single-line fields confirm on Enter, textareas use Enter to finish (Shift+Enter for a new line)
+function onEnter(el,fn){el.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();fn();}});}
+onEnter(newDone,()=>addItem("doneList","newDone"));
+onEnter(newAct,()=>addItem("actList","newAct"));
+onEnter(pNote,()=>addPerson());
+pName.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();pNote.focus();}});
+
+
+onEnter(spendingCat,()=>spendingAmt.focus());
+onEnter(spendingAmt,()=>addSpending());
+onEnter(newNote,()=>addNote());
+let mealChain=[mealB,mealL,mealD,mealS];
+mealChain.forEach((el,i)=>el.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();save();if(i<mealChain.length-1)mealChain[i+1].focus();else spendingCat.focus();}}));
+document.getElementById("date").addEventListener("change",load);
+
+// ---------- day pager (bottom of daily view) ----------
+function fmtISO(dt){return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0");}
+function shiftDay(delta){
+  let cur=document.getElementById("date").value||fmtISO(new Date());
+  let dt=new Date(cur+"T12:00:00");
+  dt.setDate(dt.getDate()+delta);
+  document.getElementById("date").value=fmtISO(dt);
+  load(); updatePager();
+  window.scrollTo(0,0);
+}
+function fmtDate(ds){
+  let dt=new Date(ds+"T12:00:00"); if(isNaN(dt)) return ds;
+  let y=dt.getFullYear(), m=dt.getMonth()+1, d=dt.getDate();
+  let lang=localStorage.getItem("diary-lang")||"zh-CN";
+  if(lang.indexOf("en")===0){
+    let mons=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    let wds=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+    return '<span class="dline-date">'+mons[m-1]+' '+d+', <b class="dline-yr">'+y+'</b></span><span class="dline-week">'+wds[dt.getDay()]+'</span>';
+  }
+  let wds=["星期日","星期一","星期二","星期三","星期四","星期五","星期六"];
+  return '<span class="dline-date"><b class="dline-yr">'+y+'</b>年'+m+'月'+d+'日</span><span class="dline-week">'+wds[dt.getDay()]+'</span>';
+}
+function fmtMonth(y,m){
+  let lang=localStorage.getItem("diary-lang")||"zh-CN";
+  if(lang.indexOf("en")===0){
+    let mons=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return mons[m-1]+' <b class="dline-yr">'+y+'</b>';
+  }
+  return '<b class="dline-yr">'+y+'</b>年'+m+'月';
+}
+function updatePager(){
+  let v=document.getElementById("date").value;
+  document.getElementById("pagerDate").textContent=v;
+  let dd=document.getElementById("dateDisplay");
+  if(dd) dd.innerHTML=fmtDate(v);
+  let d=document.getElementById("view-daily");
+  d.classList.remove("day-flip"); void d.offsetWidth; d.classList.add("day-flip");
+}
+/* ---- calendar popover (daily) ---- */
+let calY,calM;
+function hasDiary(ds){
+  try{ let raw=localStorage.getItem("diary-v1-"+ds); if(!raw) return false;
+    let o=JSON.parse(raw);
+    return !!(o.appointment||o.mood||(o.done&&o.done.length)||(o.acts&&o.acts.length)||(o.people&&o.people.length)||(o.events&&o.events.length)||o.spending||(o.meals&&(o.meals.B||o.meals.L||o.meals.D||o.meals.S))||(o.notesList&&o.notesList.length)||(o.spendingList&&o.spendingList.length));
+  }catch(e){ return false; }
+}
+function renderCalendar(){
+  document.getElementById("calTitle").textContent=calY+" / "+(calM+1);
+  let week=document.getElementById("calWeek"); week.innerHTML="";
+  t("week").forEach(w=>{let s=document.createElement("span"); s.textContent=w; week.appendChild(s);});
+  let grid=document.getElementById("calGrid"); grid.innerHTML="";
+  let first=new Date(calY,calM,1).getDay();
+  let days=new Date(calY,calM+1,0).getDate();
+  let today=new Date();
+  let sel=document.getElementById("date").value;
+  for(let i=0;i<first;i++){ grid.appendChild(document.createElement("span")); }
+  for(let d=1;d<=days;d++){
+    let cell=document.createElement("button"); cell.type="button"; cell.className="cal-day"; cell.textContent=d;
+    let ds=calY+"-"+String(calM+1).padStart(2,"0")+"-"+String(d).padStart(2,"0");
+    if(ds===sel) cell.classList.add("sel");
+    if(calY===today.getFullYear()&&calM===today.getMonth()&&d===today.getDate()) cell.classList.add("today");
+    if(hasDiary(ds)) cell.classList.add("dot");
+    cell.onclick=()=>{ document.getElementById("date").value=ds; document.getElementById("calPop").style.display="none"; load(); updatePager(); };
+    grid.appendChild(cell);
+  }
+}
+function openCalendar(){
+  let v=document.getElementById("date").value||todayLocal();
+  let dt=new Date(v+"T12:00:00"); calY=dt.getFullYear(); calM=dt.getMonth();
+  renderCalendar(); document.getElementById("calPop").style.display="block";
+}
+function closeCalendar(){ document.getElementById("calPop").style.display="none"; }
+document.getElementById("dateDisplay").addEventListener("click",e=>{ e.stopPropagation(); openCalendar(); });
+document.getElementById("calPrev").onclick=e=>{ e.stopPropagation(); calM--; if(calM<0){calM=11;calY--;} renderCalendar(); };
+document.getElementById("calNext").onclick=e=>{ e.stopPropagation(); calM++; if(calM>11){calM=0;calY++;} renderCalendar(); };
+/* ---- month & year pickers (other tabs) ---- */
+let pY,pM,pInput,pView;
+function flipView(viewId){ let v=document.getElementById(viewId); if(!v) return; v.classList.remove("view-flip"); void v.offsetWidth; v.classList.add("view-flip"); }
+function openMonthPicker(inputId,viewId){
+  let input=document.getElementById(inputId);
+  let v=input.value||(new Date().getFullYear()+"-"+String(new Date().getMonth()+1).padStart(2,"0"));
+  pY=Number(v.slice(0,4)); pM=Number(v.slice(5,7)); pInput=inputId; pView=viewId;
+  let pop=document.getElementById("monthPop");
+  let r=input.getBoundingClientRect();
+  pop.style.left=Math.min(Math.max(8,r.left),window.innerWidth-250)+"px";
+  pop.style.top=(r.bottom+6)+"px";
+  renderMonthPicker(); pop.style.display="block";
+}
+function renderMonthPicker(){
+  document.getElementById("mpYTitle").textContent=pY;
+  let grid=document.getElementById("monthGrid"); grid.innerHTML="";
+  let now=new Date();
+  for(let m=1;m<=12;m++){
+    let b=document.createElement("button"); b.type="button"; b.className="mp-cell"; b.textContent=m;
+    if(pY===now.getFullYear()&&m===now.getMonth()+1) b.classList.add("today");
+    if(m===pM) b.classList.add("sel");
+    b.onclick=()=>{
+      document.getElementById(pInput).value=pY+"-"+String(m).padStart(2,"0");
+      document.getElementById("monthPop").style.display="none";
+      if(pInput==="monthInput") gotoMonth(pY,m); else mpGoto(pY,m);
+      flipView(pView);
+    };
+    grid.appendChild(b);
+  }
+}
+function openYearPicker(){
+  let input=document.getElementById("revYearSel");
+  pY=Number(input.value)||new Date().getFullYear();
+  let pop=document.getElementById("yearPop");
+  let r=input.getBoundingClientRect();
+  pop.style.left=Math.min(Math.max(8,r.left),window.innerWidth-250)+"px";
+  pop.style.top=(r.bottom+6)+"px";
+  renderYearPicker(); pop.style.display="block";
+}
+function renderYearPicker(){
+  let grid=document.getElementById("yearGrid"); grid.innerHTML="";
+  let now=new Date().getFullYear();
+  for(let y=now-5;y<=now+5;y++){
+    let b=document.createElement("button"); b.type="button"; b.className="mp-cell"; b.textContent=y;
+    if(y===pY) b.classList.add("sel");
+    if(y===now) b.classList.add("today");
+    b.onclick=()=>{
+      document.getElementById("revYearSel").value=y;
+      document.getElementById("yearPop").style.display="none";
+      revY=y; revRender(); flipView("view-review");
+    };
+    grid.appendChild(b);
+  }
+}
+document.getElementById("monthInputDisplay").addEventListener("click",e=>{ e.preventDefault(); openMonthPicker("monthInput","view-checkin"); });
+document.getElementById("mpMonthInputDisplay").addEventListener("click",e=>{ e.preventDefault(); openMonthPicker("mpMonthInput","view-monthly"); });
+document.getElementById("revYearSel").addEventListener("click",e=>{ e.preventDefault(); openYearPicker(); });
+document.getElementById("mpYPrev").onclick=e=>{ e.stopPropagation(); pY--; renderMonthPicker(); };
+document.getElementById("mpYNext").onclick=e=>{ e.stopPropagation(); pY++; renderMonthPicker(); };
+document.addEventListener("click",e=>{
+  let cal=document.getElementById("calPop"); if(cal&&cal.style.display!=="none"&&!cal.contains(e.target)&&e.target.id!=="dateDisplay") cal.style.display="none";
+  let mp=document.getElementById("monthPop"); if(mp&&mp.style.display!=="none"&&!mp.contains(e.target)&&e.target.id!=="monthInputDisplay"&&e.target.id!=="mpMonthInputDisplay") mp.style.display="none";
+  let yp=document.getElementById("yearPop"); if(yp&&yp.style.display!=="none"&&!yp.contains(e.target)&&e.target.id!=="revYearSel") yp.style.display="none";
+});
+/* ---- keyboard shortcuts ---- */
+document.addEventListener("keydown",e=>{
+  if(document.body.classList.contains("viewing-daily")){
+    let tag=(e.target.tagName||"").toLowerCase();
+    if(tag==="input"||tag==="textarea"||tag==="select"||e.target.isContentEditable) return;
+    if(e.key==="ArrowLeft"){ e.preventDefault(); shiftDay(-1); }
+    else if(e.key==="ArrowRight"){ e.preventDefault(); shiftDay(1); }
+    else if(e.key==="t"||e.key==="T"){ e.preventDefault(); document.getElementById("date").value=todayLocal(); load(); updatePager(); }
+  } else if(document.body.classList.contains("viewing-checkin")){
+    if(e.key==="ArrowLeft"){ e.preventDefault(); shiftMonth(-1); }
+    else if(e.key==="ArrowRight"){ e.preventDefault(); shiftMonth(1); }
+    else if(e.key==="t"||e.key==="T"){ e.preventDefault(); let n=new Date(); gotoMonth(n.getFullYear(),n.getMonth()+1); }
+  } else if(document.body.classList.contains("viewing-monthly")){
+    if(e.key==="ArrowLeft"){ e.preventDefault(); document.getElementById("mpPrevM2").click(); }
+    else if(e.key==="ArrowRight"){ e.preventDefault(); document.getElementById("mpNextM2").click(); }
+    else if(e.key==="t"||e.key==="T"){ e.preventDefault(); document.getElementById("mpTodayBtn").click(); }
+  } else if(document.body.classList.contains("viewing-review")){
+    if(e.key==="ArrowLeft"){ e.preventDefault(); document.getElementById("revPrevY").click(); }
+    else if(e.key==="ArrowRight"){ e.preventDefault(); document.getElementById("revNextY").click(); }
+  }
+});
+document.getElementById("prevDay").addEventListener("click",()=>shiftDay(-1));
+document.getElementById("nextDay").addEventListener("click",()=>shiftDay(1));
+document.getElementById("todayBtn").addEventListener("click",()=>{document.getElementById("date").value=todayLocal(); load(); updatePager(); window.scrollTo(0,0);});
+document.getElementById("date").addEventListener("change",updatePager);
+
+let autoUpdating=false;
+function timeToMin(t){let[h,m]=t.split(":").map(Number);return h*60+m;}
+function minToTime(min){if(min>=1440) return "24:00"; min=((min%1440)+1440)%1440;return String(Math.floor(min/60)).padStart(2,"0")+":"+String(min%60).padStart(2,"0");}
+function autoCalc(changed){
+  if(autoUpdating) return; autoUpdating=true;
+  try{
+    let start=evTime.value, end=evEnd.value, dur=Number(evDur.value)||0;
+    if(changed==="start"){
+      if(end && timeToMin(end)>timeToMin(start)) evDur.value=timeToMin(end)-timeToMin(start);
+      else if(dur>0) evEnd.value=minToTime(timeToMin(start)+dur);
+    } else if(changed==="end"){
+      if(start && timeToMin(end)>timeToMin(start)) evDur.value=timeToMin(end)-timeToMin(start);
+      else if(dur>0) evTime.value=minToTime(timeToMin(end)-dur);
+    } else if(changed==="dur"){
+      if(start) evEnd.value=minToTime(timeToMin(start)+dur);
+      else if(end) evTime.value=minToTime(timeToMin(end)-dur);
+    }
+  } finally { autoUpdating=false; }
+}
+document.getElementById("evTime").addEventListener("change",()=>autoCalc("start"));
+document.getElementById("evEnd").addEventListener("change",()=>autoCalc("end"));
+document.getElementById("evDur").addEventListener("input",()=>autoCalc("dur"));
+document.getElementById("evDur").addEventListener("change",()=>autoCalc("dur"));
+[evDesc,evDur].forEach(el=>el.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();addEvent();}}));
+function fmtTime(idx){let h=Math.floor(idx/2), m=(idx%2)*30; return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0");}
+function endFrom(start,dur){return fmtTime((timeIndex(start)+dur/30)%48);}
+
+times().forEach(t=>{let o=document.createElement("option");o.value=t;o.textContent=t;evTime.appendChild(o);});
+times().forEach(t=>{let o=document.createElement("option");o.value=t;o.textContent=t;evEnd.appendChild(o);});
+{let o=document.createElement("option");o.value="24:00";o.textContent="24:00";evEnd.appendChild(o);}
+evEnd.value="15:00";
+evTime.value="14:00";
+document.getElementById("catButton").onclick=(e)=>{e.stopPropagation(); let m=document.getElementById("catMenu"); m.style.display=m.style.display==="none"?"block":"none";};
+document.getElementById("catSaveBtn").onclick=()=>{
+  let name=document.getElementById("catName").value.trim(); if(!name){alert(t("typeCatName"));return;}
+  let color=document.getElementById("catColor").value;
+  let existing=Object.entries(CATS).find(([k,v])=>v.name.toLowerCase()===name.toLowerCase());
+  let id=existing?existing[0]:name.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||("cat-"+Date.now());
+  CATS[id]={name:name,color:color,bg:hexToBg(color)}; saveCats(); renderCatOptions(id); hideCatForm(); renderTimeline();
+};
+document.getElementById("catCancelBtn").onclick=()=>hideCatForm();
+document.getElementById("catEditBtn").onclick=()=>{
+  if(!selectedCat || !CATS[selectedCat]){alert(t("pickCatFirst")); openCatForm(false); return;}
+  openCatForm(true);
+};
+// --- Three language systems: en-US, zh-CN, zh-TW. Daily quotes stay in English (original wording). ---
+const LANGS={"en-US":{"loadDemo":"Load demo","template":"Template","open":"Open","save":"Save","saveAs":"Save As","language":"Language","date":"Date","appointment":"Appointment","mood":"Mood","exportBackup":"Export diary","importBackup":"Import diary","exportObsidian":"Export to Obsidian (.md)","clearDay":"Clear day","todo":"TO DO LIST","meals":"MEALS","activities":"ACTIVITIES","people":"PEOPLE","peopleSub":"like MEALS, one line per person","peopleHint":"Who did you meet today, and what connected you? This list exports to Obsidian as [[Name]] links. Use the exact name from your Obsidian card.","spending":"Spending","notes":"Notes","doneTimeline":"Done Timeline","timelineHint":"Fill any two of Start, End, Duration — the third fills itself. Pick a category, note is optional, press Enter or Add.","start":"Start","end":"End","duration":"Duration (min)","category":"Category","catName":"Category name","colour":"Color","addCategory":"Add category","cancel":"Cancel","catHint":"Pick a color like in PowerPoint — the left border uses this color, the block uses a light tint of it. Typing an existing name updates its color.","note":"Note","addTimeline":"Add to timeline","editColour":"Edit color","timelineDeleteHint":"Click × on an event to delete it. All changes save automatically.","selectCategory":"Select category…","addCategoryMenu":"+ Add category…","saveColour":"Save color","total":"Total","author":"Author","copyQuote":"Copy quote","editQuote":"Edit quote","delete":"Delete","tabDaily":"Daily","tabCheckin":"Check-in","tabMonthly":"Monthly","tabMonthlySoon":"Coming soon","circleClass":"Class Committee","circleVolunteer":"Volunteer Group","circlePress":"Press Team","circleOther":"Other","appointmentPh":"e.g. Therapy session - 10AM","moodPh":"e.g. ☀️ 😊","newDonePh":"Add a to-do…","mealBPh":"Breakfast","mealLPh":"Lunch","mealDPh":"Dinner","mealSPh":"Snack","newActPh":"Add an activity…","pNamePh":"Name","pNotePh":"Connection / note, e.g. talked about rota","spendingCatPh":"Category, e.g. Coffee","spendingAmtPh":"Amount, e.g. 25","newNotePh":"Add a note…","catNamePh":"e.g. Reading","evDescPh":"Note (optional), e.g. Fogg Behavior Model p1-100","typeName":"Type a name first","typeCategory":"Type a category first","typeAmount":"Type an amount","typeCatName":"Type a category name first","addCatFirst":"Add a category first — pick + in the Category list","endAfterStart":"End must be after start (same day)","max2":"At most 2 events can share the same time","loadDemoConfirm":"Load demo will replace ALL sections with sample data. Continue?","templateConfirm":"Back to blank template? This clears today's entries and resets categories to empty (only +).","clearConfirm":"Clear this day?","nothingExport":"Nothing to export yet","nothingSave":"Nothing to save yet","notBackup":"Not a diary backup file","imported":"Imported {n} day(s)","pickCatFirst":"Pick a category first, or use + to add one","obsidianSaved":"Saved to your Obsidian folder as {name}","opened":"Opened {n} day(s) from {name}","theme":"Theme color","ckExportBackup":"Export check-ins","ckImportBackup":"Import check-ins","clearMonth":"Clear this month","emptyHint":"No habits yet — add your first one below.","renameHint":"Click a habit name to rename it.","addHabitPh":"Add a habit, e.g. Read 30 min","deleteHabit":"Delete","typeHabit":"Type a habit name first","confirmDelHabit":"Delete this habit? Its marks in all months will be removed.","clearMonthConfirm":"Clear all marks this month? Habits will be kept.","ckNotBackup":"Not a check-in backup file","ckImported":"Imported {n} record(s)","week":["S","M","T","W","T","F","S"],"months":["January","February","March","April","May","June","July","August","September","October","November","December"],"ckNothingToExport":"Nothing to back up yet","titleDaily":"My Diary","titleCheckin":"Check-in - My Diary","pagerToday":"Today","pagerThisMonth":"This month","markAs":"Mark as","titleMonthly":"Monthly - My Diary","mpHint":"Click a date to open its daily plan. Click empty space in a cell to write. The theme colour follows the check-in page.","tabBooks":"Books","tabReview":"Review","titleBooks":"Books - My Diary","titleReview":"Review - My Diary","bookBought":"Bought","bookTitle":"Title","bookAuthor":"Author / Publisher","bookRating":"Rating","bookComment":"Comment","bookFinished":"Finished","bookAddRow":"＋ Add row","bookEmpty":"No books yet — add your first with ＋ below.","revOverall":"Year in review","revHint":"Click a cell to write; click a column header to rename it.","confirmDelBook":"Delete this book?","fullExport":"Back up my data","fullImport":"Restore from backup","importConfirm":"Import {n} day(s)? Existing data for the same dates will be overwritten.","backupEmpty":"No data to back up yet.","backupCorrupt":"The backup file is corrupted and cannot be parsed.","backupNotOurs":"This is not a full-backup file from this diary.","backupVersionNew":"Backup version (v{have}) is newer than supported (v{want}). Cannot restore — please update the diary page first.","backupPreview":"Backup summary (exported {time}):\n• Daily: {diary} day(s)\n• Check-in: {checkin} month(s)\n• Monthly plan: {monthplan} month(s)\n• Books: {books}\n• Year review: {review} year(s)\n\nPress OK to choose how to restore, Cancel to abort.","backupMode":"Restore mode:\n\n[OK] Overwrite: replace ALL current data with the backup (cannot be undone)\n[Cancel] Merge: keep current data, only add what's missing","backupDoneMerge":"Restore complete: added {n} missing item(s). Existing data untouched.","backupDoneReplace":"Restore complete: replaced all data with the backup ({n} item(s)).","storageFail":"⚠️ Save failed: browser storage is full or disabled.\n\nYour latest changes may NOT have been saved! Please click “Export full backup” right now to keep a copy, then free up browser space or switch browsers.\n(This warning shows once per session.)","restoreTitle":"Restore full backup","restoreSummary":"Backup contents (exported {time}):\n• Daily: {diary} day(s)\n• Check-in: {checkin} month(s)\n• Monthly plan: {monthplan} month(s)\n• Books: {books}\n• Year review: {review} year(s)","restoreOverwrite":"Overwrite","restoreOverwriteDesc":"Delete all current data and replace with the backup (cannot be undone; a snapshot of current data is saved first).","restoreMerge":"Merge","restoreMergeDesc":"Keep current data, only add missing dates/months (existing entries are kept whole, not merged field-by-field).","restoreCancel":"Cancel","restoreFailed":"Restore incomplete: {n} write(s) failed. Existing data untouched.","restoreFailedRollback":"{n} write(s) failed during overwrite restore. Original data has been restored.","restoreRollbackFail":"Critical: restore failed and original data could not be fully recovered. Check browser storage, then retry with the backup file.","backupBadContent":"Backup content is invalid (unexpected keys or data types). Cannot restore.","tabSettings":"Settings","titleSettings":"Settings - My Diary","dataTitle":"Data","autosaveNote":"Everything you write is saved automatically in this browser — no need to press save.\nBefore switching computers/browsers or clearing browser data, use “Back up my data” below to keep a copy.","advancedTitle":"Advanced","advancedHint":"Only for exporting or importing one kind of data. For everyday backups use “Back up my data” above — it contains everything.","autosaveReady":"Autosave on","saving":"Saving…","autosavedAt":"Autosaved {time}","saveFailedShort":"⚠️ Save failed"},"zh-CN":{"loadDemo":"加载示例","template":"空白模板","open":"打开","save":"保存","saveAs":"另存为","language":"语言","date":"日期","appointment":"日程","mood":"心情","exportBackup":"导出日记","importBackup":"导入日记","exportObsidian":"导出到 Obsidian（.md）","clearDay":"清空本日","todo":"待办清单","meals":"餐食","activities":"活动","people":"人物","peopleSub":"像餐食一样，每人一行","peopleHint":"今天见了谁，又是因为什么事联系上的？这份名单可以导出到 Obsidian，变成 [[姓名]] 链接。请用 Obsidian 人物卡上的准确姓名。","spending":"支出","notes":"笔记","doneTimeline":"已完成时间轴","timelineHint":"开始、结束、时长三项填任意两项，第三项会自动算出来。选一个类别，备注可选填，按回车或点“添加”即可。","start":"开始","end":"结束","duration":"时长（分钟）","category":"类别","catName":"类别名称","colour":"颜色","addCategory":"添加类别","cancel":"取消","catHint":"像在 PowerPoint 里选颜色一样——左边框用这个颜色，色块用它的浅色。输入已有的名称会更新它的颜色。","note":"备注","addTimeline":"添加到时间轴","editColour":"编辑颜色","timelineDeleteHint":"点事件上的 × 可以删除它。所有修改都会自动保存。","selectCategory":"选择类别…","addCategoryMenu":"＋ 添加类别…","saveColour":"保存颜色","total":"总计","author":"作者","copyQuote":"复制引言","editQuote":"编辑引言","delete":"删除","tabDaily":"日计划","tabCheckin":"打卡","tabMonthly":"月计划","tabMonthlySoon":"即将推出","circleClass":"班委","circleVolunteer":"志愿团","circlePress":"记者团","circleOther":"其他","appointmentPh":"例如：心理咨询 - 10点","moodPh":"例如：☀️ 😊","newDonePh":"添加待办事项…","mealBPh":"早餐","mealLPh":"午餐","mealDPh":"晚餐","mealSPh":"加餐","newActPh":"添加活动…","pNamePh":"姓名","pNotePh":"联系 / 备注，例如：聊了排班","spendingCatPh":"类别，例如：咖啡","spendingAmtPh":"金额，例如：25","newNotePh":"添加一条笔记…","catNamePh":"例如：阅读","evDescPh":"备注（可选），例如：福格行为模型 p1-100","typeName":"请先输入姓名","typeCategory":"请先输入类别","typeAmount":"请先输入金额","typeCatName":"请先输入类别名称","addCatFirst":"请先添加类别——在类别列表里点 ＋","endAfterStart":"结束时间必须晚于开始时间（同一天）","max2":"同一时间最多只能有 2 个事件","loadDemoConfirm":"加载示例会替换所有板块为示例数据。继续吗？","templateConfirm":"回到空白模板吗？这会清空今天的内容，并把类别重置为空（只剩 ＋）。","clearConfirm":"清空这一天吗？","nothingExport":"还没有什么可以导出的","nothingSave":"还没有什么可以保存的","notBackup":"不是日记备份文件","imported":"已导入 {n} 天","pickCatFirst":"请先选一个类别，或者点 ＋ 添加一个","obsidianSaved":"已保存到你的 Obsidian 文件夹，文件名为 {name}","opened":"已从 {name} 打开 {n} 天","theme":"主题色","ckExportBackup":"导出打卡","ckImportBackup":"导入打卡","clearMonth":"清空本月打卡","emptyHint":"还没有习惯，在下面添加第一个吧。","renameHint":"点击习惯名可以改名。","addHabitPh":"添加习惯，例如：阅读30分钟","deleteHabit":"删除","typeHabit":"请先输入习惯名称","confirmDelHabit":"删除这个习惯吗？它在所有月份的打卡都会被删掉。","clearMonthConfirm":"清空本月的全部打卡吗？习惯会保留。","ckNotBackup":"不是打卡备份文件","ckImported":"已导入 {n} 条记录","week":["日","一","二","三","四","五","六"],"months":["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"],"ckNothingToExport":"还没有什么可以备份的","titleDaily":"My Diary","titleCheckin":"打卡 - My Diary","pagerToday":"今天","pagerThisMonth":"本月","markAs":"标记为","titleMonthly":"月计划 - My Diary","mpHint":"点日期跳到那天的日计划；点格子空白处直接写内容。主题色跟随打卡页同月。","tabBooks":"书单","tabReview":"月总结","titleBooks":"Books - My Diary","titleReview":"Review - My Diary","bookBought":"购买日期","bookTitle":"书名","bookAuthor":"作者/出版社","bookRating":"评分","bookComment":"短评","bookFinished":"读完日期","bookAddRow":"＋ 添加一行","bookEmpty":"还没有书，点下面的＋添加第一本。","revOverall":"全年总结","revHint":"点格子直接写；点表头可以改栏名。","confirmDelBook":"删除这本书？","fullExport":"备份我的数据","fullImport":"从备份恢复","importConfirm":"将导入 {n} 天的数据，相同日期的现有内容会被覆盖，继续吗？","backupEmpty":"还没有可备份的数据。","backupCorrupt":"备份文件已损坏，无法解析。","backupNotOurs":"这不是本日记本的全部备份文件。","backupVersionNew":"备份版本（v{have}）高于当前支持的版本（v{want}），无法恢复——请先更新日记本页面。","backupPreview":"备份概况（导出于 {time}）：\n• 日计划：{diary} 天\n• 打卡：{checkin} 个月\n• 月计划：{monthplan} 个月\n• 书单：{books} 本\n• 年总结：{review} 年\n\n点“确定”选择恢复方式，点“取消”放弃恢复。","backupMode":"恢复方式：\n\n【确定】覆盖：用备份完全替换现有全部数据（不可撤销）\n【取消】合并：保留现有数据，仅补充缺失部分","backupDoneMerge":"恢复完成：补充了 {n} 项缺失数据，现有数据未动。","backupDoneReplace":"恢复完成：已用备份替换全部数据（共 {n} 项）。","storageFail":"⚠️ 保存失败：浏览器存储空间不足或被禁用。\n\n你刚才的修改可能没有存上！请立即点“导出全部备份”留存数据，然后清理浏览器空间或换个浏览器。\n（本次打开只提示一次）","restoreTitle":"恢复全部备份","restoreSummary":"备份内容（导出于 {time}）：\n• 日计划 {diary} 天\n• 打卡 {checkin} 个月\n• 月计划 {monthplan} 个月\n• 书单 {books} 本\n• 年总结 {review} 年","restoreOverwrite":"覆盖","restoreOverwriteDesc":"删除现有全部数据，用备份替换（不可撤销；执行前会自动保存当前数据快照）。","restoreMerge":"合并","restoreMergeDesc":"保留现有数据，仅补充缺失的日期/月份（已存在的日期整条保留，不逐项合并）。","restoreCancel":"取消","restoreFailed":"恢复未完成：{n} 项写入失败，现有数据未受影响。","restoreFailedRollback":"覆盖恢复中 {n} 项写入失败，已将原来的数据恢复。","restoreRollbackFail":"严重：恢复失败，且原数据没能完整恢复。请检查浏览器存储空间，然后用备份文件重试。","backupBadContent":"备份文件内容不合法（存在异常的键或数据类型），无法恢复。","tabSettings":"设置","titleSettings":"设置 - My Diary","dataTitle":"数据管理","autosaveNote":"你写的东西会自动保存在这个浏览器里，不用点保存。\n换电脑、换浏览器，或者清理浏览器数据之前，先用下面的「备份我的数据」存一份。","advancedTitle":"高级功能","advancedHint":"只需要单独导出或导入某一类数据时用。日常备份请用上面的「备份我的数据」，它包含全部内容。","autosaveReady":"自动保存已开启","saving":"正在保存…","autosavedAt":"已自动保存 {time}","saveFailedShort":"⚠️ 保存失败"},"zh-TW":{"loadDemo":"載入範例","template":"空白範本","open":"開啟","save":"儲存","saveAs":"另存新檔","language":"語言","date":"日期","appointment":"行程","mood":"心情","exportBackup":"匯出日記","importBackup":"匯入日記","exportObsidian":"匯出至 Obsidian（.md）","clearDay":"清除本日","todo":"待辦清單","meals":"餐食","activities":"活動","people":"人物","peopleSub":"像餐食一樣，每人一行","peopleHint":"今天見了誰，又是因為什麼事聯繫上的？這份名單可以匯出到 Obsidian，變成 [[姓名]] 連結。請用 Obsidian 人物卡上的準確姓名。","spending":"支出","notes":"筆記","doneTimeline":"已完成時間軸","timelineHint":"開始、結束、時長三項填任意兩項，第三項會自動算出來。選一個類別，備註可填可不填，按 Enter 或點「新增」即可。","start":"開始","end":"結束","duration":"時長（分鐘）","category":"類別","catName":"類別名稱","colour":"顏色","addCategory":"新增類別","cancel":"取消","catHint":"像在 PowerPoint 裡選顏色一樣——左邊框用這個顏色，色塊用它的淺色。輸入已有的名稱會更新它的顏色。","note":"備註","addTimeline":"新增到時間軸","editColour":"編輯顏色","timelineDeleteHint":"點事件上的 × 可以刪除它。所有修改都會自動儲存。","selectCategory":"選擇類別…","addCategoryMenu":"＋ 新增類別…","saveColour":"儲存顏色","total":"總計","author":"作者","copyQuote":"複製引言","editQuote":"編輯引言","delete":"刪除","tabDaily":"日計劃","tabCheckin":"打卡","tabMonthly":"月計劃","tabMonthlySoon":"即將推出","circleClass":"班委","circleVolunteer":"志工團","circlePress":"記者團","circleOther":"其他","appointmentPh":"例如：心理諮商 - 10點","moodPh":"例如：☀️ 😊","newDonePh":"新增待辦事項…","mealBPh":"早餐","mealLPh":"午餐","mealDPh":"晚餐","mealSPh":"點心","newActPh":"新增活動…","pNamePh":"姓名","pNotePh":"聯繫 / 備註，例如：聊了排班","spendingCatPh":"類別，例如：咖啡","spendingAmtPh":"金額，例如：25","newNotePh":"新增一則筆記…","catNamePh":"例如：閱讀","evDescPh":"備註（選填），例如：福格行為模型 p1-100","typeName":"請先輸入姓名","typeCategory":"請先輸入類別","typeAmount":"請先輸入金額","typeCatName":"請先輸入類別名稱","addCatFirst":"請先新增類別——在類別清單裡點 ＋","endAfterStart":"結束時間必須晚於開始時間（同一天）","max2":"同一時間最多只能有 2 個事件","loadDemoConfirm":"載入範例會取代所有板塊為範例資料。繼續嗎？","templateConfirm":"回到空白範本嗎？這會清除今天的內容，並把類別重置為空（只剩 ＋）。","clearConfirm":"清除這一天嗎？","nothingExport":"還沒有什麼可以匯出的","nothingSave":"還沒有什麼可以儲存的","notBackup":"不是日記備份檔案","imported":"已匯入 {n} 天","pickCatFirst":"請先選一個類別，或者點 ＋ 新增一個","obsidianSaved":"已儲存到你的 Obsidian 資料夾，檔名為 {name}","opened":"已從 {name} 開啟 {n} 天","theme":"主題色","ckExportBackup":"匯出打卡","ckImportBackup":"匯入打卡","clearMonth":"清除本月打卡","emptyHint":"還沒有習慣，在下面新增第一個吧。","renameHint":"點擊習慣名稱可以改名。","addHabitPh":"新增習慣，例如：閱讀30分鐘","deleteHabit":"刪除","typeHabit":"請先輸入習慣名稱","confirmDelHabit":"刪除這個習慣嗎？它在所有月份的打卡都會被刪掉。","clearMonthConfirm":"清除本月的全部打卡嗎？習慣會保留。","ckNotBackup":"不是打卡備份檔案","ckImported":"已匯入 {n} 筆記錄","week":["日","一","二","三","四","五","六"],"months":["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"],"ckNothingToExport":"還沒有什麼可以備份的","titleDaily":"My Diary","titleCheckin":"打卡 - My Diary","pagerToday":"今天","pagerThisMonth":"本月","markAs":"標記為","titleMonthly":"月計劃 - My Diary","mpHint":"點日期跳到那天的日計劃；點格子空白處直接寫內容。主題色跟隨打卡頁同月。","tabBooks":"書單","tabReview":"月總結","titleBooks":"Books - My Diary","titleReview":"Review - My Diary","bookBought":"購買日期","bookTitle":"書名","bookAuthor":"作者/出版社","bookRating":"評分","bookComment":"短評","bookFinished":"讀完日期","bookAddRow":"＋ 新增一行","bookEmpty":"還沒有書，點下面的＋新增第一本。","revOverall":"全年總結","revHint":"點格子直接寫；點表頭可以改欄名。","confirmDelBook":"刪除這本書？","fullExport":"備份我的資料","fullImport":"從備份還原","importConfirm":"將匯入 {n} 天的資料，相同日期的現有內容會被覆寫，繼續嗎？","backupEmpty":"還沒有可備份的資料。","backupCorrupt":"備份檔案已損毀，無法解析。","backupNotOurs":"這不是本日記本的全部備份檔案。","backupVersionNew":"備份版本（v{have}）高於目前支援的版本（v{want}），無法還原——請先更新日記本頁面。","backupPreview":"備份概況（匯出於 {time}）：\n• 日計劃：{diary} 天\n• 打卡：{checkin} 個月\n• 月計劃：{monthplan} 個月\n• 書單：{books} 本\n• 年總結：{review} 年\n\n點“確定”選擇還原方式，點“取消”放棄還原。","backupMode":"還原方式：\n\n【確定】覆寫：用備份完全取代現有全部資料（不可復原）\n【取消】合併：保留現有資料，僅補充缺少部分","backupDoneMerge":"還原完成：補充了 {n} 項缺少資料，現有資料未動。","backupDoneReplace":"還原完成：已用備份取代全部資料（共 {n} 項）。","storageFail":"⚠️ 儲存失敗：瀏覽器儲存空間不足或被停用。\n\n你剛才的修改可能沒有存上！請立即點“匯出全部備份”留存資料，然後清理瀏覽器空間或換個瀏覽器。\n（本次開啟只提示一次）","restoreTitle":"還原全部備份","restoreSummary":"備份內容（匯出於 {time}）：\n• 日計劃 {diary} 天\n• 打卡 {checkin} 個月\n• 月計劃 {monthplan} 個月\n• 書單 {books} 本\n• 年總結 {review} 年","restoreOverwrite":"覆寫","restoreOverwriteDesc":"刪除現有全部資料，用備份取代（不可復原；執行前會自動儲存目前資料快照）。","restoreMerge":"合併","restoreMergeDesc":"保留現有資料，僅補充缺少的日期/月份（已存在的日期整條保留，不逐項合併）。","restoreCancel":"取消","restoreFailed":"還原未完成：{n} 項寫入失敗，現有資料未受影響。","restoreFailedRollback":"覆寫還原中 {n} 項寫入失敗，已將原來的資料恢復。","restoreRollbackFail":"嚴重：還原失敗，且原資料未能完整恢復。請檢查瀏覽器儲存空間，然後用備份檔案重試。","backupBadContent":"備份檔案內容不合法（存在異常的鍵或資料類型），無法還原。","tabSettings":"設定","titleSettings":"設定 - My Diary","dataTitle":"資料管理","autosaveNote":"你寫的東西會自動儲存在這個瀏覽器裡，不用點儲存。\n換電腦、換瀏覽器，或者清理瀏覽器資料之前，先用下面的「備份我的資料」存一份。","advancedTitle":"進階功能","advancedHint":"只需要單獨匯出或匯入某一類資料時用。日常備份請用上面的「備份我的資料」，它包含全部內容。","autosaveReady":"自動儲存已開啟","saving":"正在儲存…","autosavedAt":"已自動儲存 {time}","saveFailedShort":"⚠️ 儲存失敗"}};
+let currentLang=localStorage.getItem("diary-lang")||"en-US";
+if(!LANGS[currentLang]) currentLang="en-US";
+function t(key,params){
+  let s=(LANGS[currentLang]&&LANGS[currentLang][key])||LANGS["en-US"][key]||key;
+  if(params) Object.entries(params).forEach(([k,v])=>{s=s.replace("{"+k+"}",v);});
+  return s;
+}
+function applyLang(lang){
+  if(lang) currentLang=lang;
+  if(!LANGS[currentLang]) currentLang="en-US";
+  storeSet("diary-lang",currentLang);
+  document.documentElement.lang=currentLang;
+  document.querySelectorAll("[data-i18n]").forEach(el=>{let v=t(el.getAttribute("data-i18n")); if(typeof v==="string") el.textContent=v;});
+  document.querySelectorAll("[data-i18n-ph]").forEach(el=>{el.placeholder=t(el.getAttribute("data-i18n-ph"));});
+  document.querySelectorAll("[data-i18n-title]").forEach(el=>{el.title=t(el.getAttribute("data-i18n-title"));});
+  let sel=document.getElementById("langSelect"); if(sel) sel.value=currentLang;
+}
+
+
+// ================= check-in view (merged from checkin.html) =================
+// ---------- state & storage ----------
+const DEFAULT_THEME="#849A6E";
+const THEMES=["#6E8AA0","#B97358","#B99438","#8D7BAF","#7A925A","#787268"];
+function themeForMonth(y,m){ return THEMES[((m-1)%6+6)%6]; }
+let viewY, viewM; // month: 1-12
+let markMode=localStorage.getItem("checkin-v1-markmode")||"heart";
+let habits=[];   // [{id,name}] global
+let monthData={theme:DEFAULT_THEME,marks:{}}; // per month
+function monthKey(y,m){return "checkin-v1-"+y+"-"+String(m).padStart(2,"0");}
+function loadHabits(){try{habits=JSON.parse(localStorage.getItem("checkin-v1-habits")||"[]");}catch(e){habits=[];}}
+function saveHabits(){storeSet("checkin-v1-habits",JSON.stringify(habits));}
+function loadMonth(){
+  try{monthData=JSON.parse(localStorage.getItem(monthKey(viewY,viewM))||"null")||{theme:DEFAULT_THEME,marks:{}};}
+  catch(e){monthData={theme:DEFAULT_THEME,marks:{}};}
+  if(!monthData.theme) monthData.theme=DEFAULT_THEME;
+  if(!monthData.marks) monthData.marks={};
+}
+function saveMonth(){storeSet(monthKey(viewY,viewM),JSON.stringify(monthData));}
+
+// ---------- color ----------
+function hexRgb(h){h=h.replace("#","");return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
+function mix(h1,h2,w){ // w: 0..1 weight of h2
+  let a=hexRgb(h1),b=hexRgb(h2);
+  let c=a.map((v,i)=>Math.round(v*(1-w)+b[i]*w));
+  return "#"+c.map(v=>v.toString(16).padStart(2,"0")).join("");
+}
+
+function applyDayTheme(){
+  let dv=document.getElementById("date"); if(!dv) return;
+  let v=dv.value||""; let m=v.match(/^(\d{4})-(\d{2})/); if(!m) return;
+  let theme=themeForMonth(Number(m[1]), Number(m[2]));
+  let root=document.documentElement;
+  root.style.setProperty("--theme", theme);
+  root.style.setProperty("--theme-deep", mix(theme,"#000000",0.08));
+  root.style.setProperty("--accent", theme);
+  root.style.setProperty("--accent-deep", mix(theme,"#000000",0.22));
+  root.style.setProperty("--accent-tint", mix(theme,"#ffffff",0.82));
+  root.style.setProperty("--tab", mix(theme,"#ffffff",0.45));
+  root.style.setProperty("--tab-deep", mix(theme,"#000000",0.14));
+}
+
+// ---------- render ----------
+function renderHead(){
+  let days=new Date(viewY,viewM,0).getDate();
+  let head=document.getElementById("gridHead"); head.innerHTML="";
+  let tr1=document.createElement("tr"), tr2=document.createElement("tr");
+  let c1=document.createElement("th"); c1.className="corner"; c1.rowSpan=2; tr1.appendChild(c1);
+  let today=new Date(); let isCur=(today.getFullYear()===viewY&&today.getMonth()+1===viewM);
+  for(let d=1;d<=days;d++){
+    let th=document.createElement("th"); th.textContent=d;
+    if(isCur&&d===today.getDate()) th.className="today";
+    tr1.appendChild(th);
+  }
+  for(let d=1;d<=days;d++){
+    let th=document.createElement("th"); th.textContent=t("week")[new Date(viewY,viewM-1,d).getDay()];
+    if(isCur&&d===today.getDate()) th.className="today";
+    tr2.appendChild(th);
+  }
+  head.appendChild(tr1); head.appendChild(tr2);
+  document.getElementById("monthName").textContent=t("months")[viewM-1];
+}
+function renderBody(){
+  let body=document.getElementById("gridBody"); body.innerHTML="";
+  let days=new Date(viewY,viewM,0).getDate();
+  let today=new Date(); let isCur=(today.getFullYear()===viewY&&today.getMonth()+1===viewM);
+  let theme=themeForMonth(viewY,viewM);
+  habits.forEach((h,i)=>{
+    let tr=document.createElement("tr");
+    let th=document.createElement("th");
+    th.innerHTML=`<div class="hwrap"><span class="hname" title="${h.name}">${h.name}</span><button class="rowdel" title="${t("deleteHabit")}">×</button></div>`;
+    th.querySelector(".rowdel").onclick=()=>delHabit(h.id);
+    th.querySelector(".hname").onclick=(e)=>startRename(e.target,h);
+    tr.appendChild(th);
+    for(let d=1;d<=days;d++){
+      let td=document.createElement("td");
+      if(isCur&&d===today.getDate()) td.className="today";
+      let btn=document.createElement("button"); btn.className="cell";
+      let marked=monthData.marks[h.id]&&monthData.marks[h.id][d];
+      if(marked===1||marked===true) marked="heart"; // legacy marks
+      if(marked==="heart"){btn.textContent="❤"; btn.style.color=mix(theme,"#ffffff",0.35); btn.classList.add("marked");}
+      else if(marked==="check"){btn.textContent="✓"; btn.style.color="#a8a396"; btn.style.fontWeight="600"; btn.classList.add("marked");}
+      else if(marked==="fill"){td.style.background=mix(theme,"#ffffff",0.87); btn.classList.add("marked");}
+      btn.onclick=()=>toggleMark(h.id,d);
+      td.appendChild(btn); tr.appendChild(td);
+    }
+    body.appendChild(tr);
+  });
+  let eh=document.getElementById("emptyHint"); if(eh) eh.style.display=habits.length?"none":"block";
+}
+function renderCtl(){
+  let mi=document.getElementById("monthInput"); if(mi) mi.value=viewY+"-"+String(viewM).padStart(2,"0");
+  let md=document.getElementById("monthInputDisplay"); if(md) md.innerHTML=fmtMonth(viewY,viewM);
+  document.getElementById("themeColor").value=monthData.theme||DEFAULT_THEME;
+  let fsw=document.getElementById("fillSw"); if(fsw) fsw.style.background=monthData.theme||DEFAULT_THEME;
+}
+function renderAll(){renderHead();renderBody();renderCtl();}
+
+// ---------- actions ----------
+function toggleMark(hid,d){
+  if(!monthData.marks[hid]) monthData.marks[hid]={};
+  let cur=monthData.marks[hid][d];
+  if(cur===1||cur===true) cur="heart"; // legacy marks
+  if(cur===markMode) delete monthData.marks[hid][d];
+  else monthData.marks[hid][d]=markMode;
+  saveMonth(); renderBody();
+}
+function setMarkMode(m){
+  markMode=m;
+  try{storeSet("checkin-v1-markmode",m);}catch(e){}
+  document.querySelectorAll("#markSeg button").forEach(b=>b.classList.toggle("on",b.getAttribute("data-mode")===m));
+}
+function addHabit(){
+  let inp=document.getElementById("newHabit"); let name=inp.value.trim();
+  if(!name){alert(t("typeHabit"));inp.focus();return;}
+  habits.push({id:"h"+Date.now(),name:name});
+  inp.value=""; saveHabits(); renderBody(); inp.focus();
+}
+function delHabit(hid){
+  if(!confirm(t("confirmDelHabit"))) return;
+  habits=habits.filter(h=>h.id!==hid); saveHabits();
+  for(let i=0;i<localStorage.length;i++){
+    let k=localStorage.key(i);
+    if(k&&k.startsWith("checkin-v1-2")){
+      try{let o=JSON.parse(localStorage.getItem(k)); if(o&&o.marks&&o.marks[hid]){delete o.marks[hid]; storeSet(k,JSON.stringify(o));}}catch(e){}
+    }
+  }
+  if(monthData.marks[hid]){delete monthData.marks[hid]; saveMonth();}
+  renderBody();
+}
+function startRename(span,h){
+  let input=document.createElement("input"); input.className="hname-edit"; input.value=h.name;
+  span.replaceWith(input); input.focus(); input.select();
+  let done=false;
+  function commit(save){
+    if(done) return; done=true;
+    let v=input.value.trim();
+    if(save&&v){h.name=v; saveHabits();}
+    renderBody();
+  }
+  input.addEventListener("keydown",e=>{
+    if(e.key==="Enter") commit(true);
+    if(e.key==="Escape") commit(false);
+  });
+  input.addEventListener("blur",()=>commit(true));
+}
+
+// ---------- wiring ----------
+document.getElementById("addHabitBtn").onclick=addHabit;
+document.getElementById("newHabit").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();addHabit();}});
+function updateMonthPager(){
+  let el=document.getElementById("ckPagerMonth"); if(el) el.textContent=document.getElementById("monthName").textContent;
+}
+function gotoMonth(y,m){viewY=y; viewM=m; loadMonth(); renderAll(); updateMonthPager();}
+function shiftMonth(d){let y=viewY,m=viewM+d; if(m<1){m=12;y--;} if(m>12){m=1;y++;} gotoMonth(y,m); window.scrollTo(0,0);}
+
+
+document.getElementById("monthInput").onchange=e=>{let v=e.target.value; if(!v) return; let [y,m]=v.split("-").map(Number); gotoMonth(y,m);};
+document.getElementById("ckPrevM").addEventListener("click",()=>shiftMonth(-1));
+document.getElementById("ckNextM").addEventListener("click",()=>shiftMonth(1));
+document.getElementById("ckTodayBtn").addEventListener("click",()=>{let n=new Date(); gotoMonth(n.getFullYear(),n.getMonth()+1); window.scrollTo(0,0);});
+document.querySelectorAll("#markSeg button").forEach(b=>b.addEventListener("click",()=>setMarkMode(b.getAttribute("data-mode"))));
+document.getElementById("themeColor").oninput=e=>{monthData.theme=e.target.value; saveMonth(); renderBody(); let fsw=document.getElementById("fillSw"); if(fsw) fsw.style.background=e.target.value;};
+document.getElementById("ckExportBtn").onclick=()=>{
+  let out={};
+  for(let i=0;i<localStorage.length;i++){let k=localStorage.key(i); if(k&&k.startsWith("checkin-v1-")) out[k]=localStorage.getItem(k);}
+  if(!Object.keys(out).length){alert(t("ckNothingToExport"));return;}
+  let blob=new Blob([JSON.stringify(out,null,2)],{type:"application/json"});
+  let a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="checkin-backup-"+viewY+"-"+String(viewM).padStart(2,"0")+".json"; a.click();
+  URL.revokeObjectURL(a.href);
+};
+document.getElementById("ckImportBtn").onclick=()=>document.getElementById("ckImportFile").click();
+document.getElementById("ckImportFile").onchange=e=>{
+  let f=e.target.files[0]; if(!f) return; let r=new FileReader();
+  r.onload=()=>{try{
+    let obj=JSON.parse(r.result); let n=0;
+    Object.entries(obj).forEach(([k,v])=>{if(k.startsWith("checkin-v1-")){storeSet(k,typeof v==="string"?v:JSON.stringify(v)); n++;}});
+    alert(t("ckImported",{n:n})); loadHabits(); loadMonth(); renderAll();
+  }catch(err){alert(t("ckNotBackup"));}};
+  r.readAsText(f); e.target.value="";
+};
+
+// =============== end check-in view ===============
+
+// ================= monthly plan view =================
+// official holidays 2025/2026 (State Council notices, verified); 2027+ not announced yet
+const HOLIDAYS={
+ "2025-1-1":{t:"h",n:"元旦"},"2025-1-28":{t:"h",n:"除夕"},"2025-1-29":{t:"h",n:"春节"},
+ "2025-4-4":{t:"h",n:"清明节"},"2025-5-1":{t:"h",n:"劳动节"},"2025-5-31":{t:"h",n:"端午节"},
+ "2025-10-1":{t:"h",n:"国庆节"},"2025-10-6":{t:"h",n:"中秋节"},
+ "2025-1-26":{t:"w"},"2025-2-8":{t:"w"},"2025-4-27":{t:"w"},"2025-9-28":{t:"w"},"2025-10-11":{t:"w"},
+ "2026-1-1":{t:"h",n:"元旦"},"2026-2-16":{t:"h",n:"除夕"},"2026-2-17":{t:"h",n:"春节"},
+ "2026-4-4":{t:"h",n:"清明节"},"2026-5-1":{t:"h",n:"劳动节"},"2026-6-19":{t:"h",n:"端午节"},
+ "2026-9-25":{t:"h",n:"中秋节"},"2026-10-1":{t:"h",n:"国庆节"},
+ "2026-1-4":{t:"w"},"2026-2-14":{t:"w"},"2026-2-28":{t:"w"},"2026-5-9":{t:"w"},"2026-9-20":{t:"w"},"2026-10-10":{t:"w"}
+};
+// solar terms: verified tables 2025-2027; formula fallback for other years
+const ST_DAYS={
+ 2025:{1:{5:"小寒",20:"大寒"},2:{3:"立春",18:"雨水"},3:{5:"惊蛰",20:"春分"},4:{4:"清明",20:"谷雨"},5:{5:"立夏",21:"小满"},6:{5:"芒种",21:"夏至"},7:{6:"小暑",22:"大暑"},8:{7:"立秋",23:"处暑"},9:{7:"白露",23:"秋分"},10:{8:"寒露",23:"霜降"},11:{7:"立冬",22:"小雪"},12:{7:"大雪",21:"冬至"}},
+ 2026:{1:{5:"小寒",20:"大寒"},2:{4:"立春",18:"雨水"},3:{5:"惊蛰",20:"春分"},4:{5:"清明",20:"谷雨"},5:{5:"立夏",21:"小满"},6:{5:"芒种",21:"夏至"},7:{7:"小暑",23:"大暑"},8:{7:"立秋",23:"处暑"},9:{7:"白露",23:"秋分"},10:{8:"寒露",23:"霜降"},11:{7:"立冬",22:"小雪"},12:{7:"大雪",22:"冬至"}},
+ 2027:{1:{5:"小寒",20:"大寒"},2:{4:"立春",19:"雨水"},3:{6:"惊蛰",21:"春分"},4:{5:"清明",20:"谷雨"},5:{6:"立夏",21:"小满"},6:{6:"芒种",21:"夏至"},7:{7:"小暑",23:"大暑"},8:{8:"立秋",23:"处暑"},9:{8:"白露",23:"秋分"},10:{8:"寒露",23:"霜降"},11:{7:"立冬",22:"小雪"},12:{7:"大雪",22:"冬至"}}
+};
+const ST_C=[5.4055,20.12,3.87,18.73,5.63,20.646,4.81,20.888,5.52,21.04,5.678,21.37,6.208,22.83,7.03,23.13,7.456,23.042,8.318,23.438,7.438,22.36,7.18,21.94];
+const ST_N=["小寒","大寒","立春","雨水","惊蛰","春分","清明","谷雨","立夏","小满","芒种","夏至","小暑","大暑","立秋","处暑","白露","秋分","寒露","霜降","立冬","小雪","大雪","冬至"];
+const ST_M=[1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12];
+function solarTerm(y,m,d){
+  let tab=ST_DAYS[y];
+  if(tab&&tab[m]&&tab[m][d]) return tab[m][d];
+  let Y=y%100;
+  for(let i=0;i<24;i++){
+    if(ST_M[i]!==m) continue;
+    if(Math.floor(Y*0.2422+ST_C[i])-Math.floor((Y-1)/4)===d) return ST_N[i];
+  }
+  return null;
+}
+let mpY, mpM;
+function mpKey(){return "monthplan-v1-"+mpY+"-"+String(mpM).padStart(2,"0");}
+function mpLoad(){try{return JSON.parse(localStorage.getItem(mpKey()))||{days:{}};}catch(e){return {days:{}};}}
+function mpSave(data){try{storeSet(mpKey(),JSON.stringify(data));}catch(e){}}
+function mpTheme(){ return themeForMonth(mpY,mpM); }
+function jumpToDay(y,m,d){
+  document.getElementById("date").value=y+"-"+String(m).padStart(2,"0")+"-"+String(d).padStart(2,"0");
+  load(); updatePager();
+  switchView("view-daily");
+}
+function renderMpHead(){
+  let wk=t("week");
+  let monFirst=wk.slice(1).concat(wk.slice(0,1));
+  document.getElementById("mpGridHead").innerHTML="<tr>"+monFirst.map(w=>"<th>"+w+"</th>").join("")+"</tr>";
+}
+function renderMpGrid(){
+  let theme=mpTheme();
+  let data=mpLoad();
+  let firstDow=(new Date(mpY,mpM-1,1).getDay()+6)%7;
+  let dim=new Date(mpY,mpM,0).getDate();
+  let dimPrev=new Date(mpY,mpM-1,0).getDate();
+  let now=new Date();
+  let isCur=(now.getFullYear()===mpY&&now.getMonth()+1===mpM);
+  let html="";
+  for(let r=0;r<6;r++){
+    html+="<tr>";
+    for(let c=0;c<7;c++){
+      let idx=r*7+c, dnum=idx-firstDow+1, y=mpY, m=mpM, other=false;
+      if(dnum<1){dnum=dimPrev+dnum; m=mpM-1; if(m<1){m=12;y--;} other=true;}
+      else if(dnum>dim){dnum-=dim; m=mpM+1; if(m>12){m=1;y++;} other=true;}
+      let isToday=isCur&&!other&&dnum===now.getDate();
+      html+='<td'+(isToday?' class="mp-today" style="background:'+mix(theme,"#ffffff",0.72)+'"':"")+'>';
+      if(other){
+        html+='<button class="mp-num mp-other mp-jump" data-y="'+y+'" data-m="'+m+'" data-d="'+dnum+'">'+dnum+'</button>';
+      }else{
+        let hol=HOLIDAYS[y+"-"+m+"-"+dnum];
+        let tag="";
+        if(hol&&hol.t==="h") tag='<span class="mp-tag mp-hol">'+hol.n+'</span>';
+        else if(hol&&hol.t==="w") tag='<span class="mp-tag mp-ban">班</span>';
+        else{
+          let term=solarTerm(y,m,dnum);
+          if(term) tag='<span class="mp-tag mp-term">'+term+'</span>';
+        }
+        let body=(data.days&&data.days[dnum])||"";
+        html+='<div class="mp-head"><button class="mp-num mp-jump" data-y="'+y+'" data-m="'+m+'" data-d="'+dnum+'">'+dnum+'</button>'+tag+'</div>';
+        html+='<div class="mp-body" contenteditable="true" data-d="'+dnum+'">'+body+'</div>';
+      }
+      html+="</td>";
+    }
+    html+="</tr>";
+  }
+  let gb=document.getElementById("mpGridBody");
+  gb.innerHTML=html;
+  gb.querySelectorAll(".mp-jump").forEach(b=>b.addEventListener("click",()=>{
+    jumpToDay(+b.getAttribute("data-y"),+b.getAttribute("data-m"),+b.getAttribute("data-d"));
+  }));
+  gb.querySelectorAll(".mp-body").forEach(el=>{
+    let saveT=null;
+    el.addEventListener("input",()=>{clearTimeout(saveT); saveT=setTimeout(()=>mpSaveDay(el),800);});
+    el.addEventListener("blur",()=>{clearTimeout(saveT); mpSaveDay(el);});
+  });
+  let mn=document.getElementById("mpMonthName");
+  mn.textContent=t("months")[mpM-1];
+  mn.style.color=mix(theme,"#000000",0.35);
+  updateMpPager();
+}
+function mpSaveDay(el){
+  let d=el.getAttribute("data-d");
+  let data=mpLoad(); if(!data.days) data.days={};
+  let html=el.innerHTML;
+  if(!el.textContent.trim()) html="";
+  if(html) data.days[d]=html; else delete data.days[d];
+  mpSave(data);
+}
+function mpGoto(y,m){mpY=y; mpM=m; mpRender();}
+function mpRender(){
+  renderMpHead(); renderMpGrid();
+  let mi=document.getElementById("mpMonthInput"); if(mi) mi.value=mpY+"-"+String(mpM).padStart(2,"0");
+  let md=document.getElementById("mpMonthInputDisplay"); if(md) md.innerHTML=fmtMonth(mpY,mpM);
+}
+function updateMpPager(){
+  let el=document.getElementById("mpPagerMonth");
+  if(el) el.textContent=document.getElementById("mpMonthName").textContent;
+}
+// =============== end monthly plan view ===============
+
+// ================= book list view =================
+let books=[];
+function booksLoad(){try{books=JSON.parse(localStorage.getItem("books-v1-list"))||[];}catch(e){books=[];}}
+function booksSave(){try{storeSet("books-v1-list",JSON.stringify(books));}catch(e){}}
+function starWidget(book,onChange){
+  let wrap=document.createElement("div"); wrap.className="stars";
+  for(let i=0;i<5;i++){let b=document.createElement("button"); b.type="button"; b.textContent="★"; wrap.appendChild(b);}
+  let val=book.rating||0;
+  const paint=v=>{wrap.querySelectorAll("button").forEach((s,i)=>s.classList.toggle("lit",i<v));};
+  paint(val);
+  const fromX=cx=>{
+    let btns=wrap.querySelectorAll("button");
+    for(let i=0;i<btns.length;i++){if(cx<btns[i].getBoundingClientRect().right) return i+1;}
+    return 5;
+  };
+  wrap.addEventListener("pointermove",e=>paint(fromX(e.clientX)));
+  wrap.addEventListener("pointerleave",()=>paint(val));
+  wrap.addEventListener("click",e=>{val=fromX(e.clientX); paint(val); onChange(val);});
+  wrap.addEventListener("touchmove",e=>{val=fromX(e.touches[0].clientX); paint(val);},{passive:true});
+  wrap.addEventListener("touchend",()=>onChange(val));
+  return wrap;
+}
+function booksRender(){
+  let tb=document.getElementById("bkBody"); tb.innerHTML="";
+  const mk=(f,val,cls)=>{let d=document.createElement("div"); d.className=cls; d.contentEditable="true"; d.setAttribute("data-f",f); d.innerHTML=val; return d;};
+  books.forEach(bk=>{
+    let row=document.createElement("div"); row.className="bk-row"; row.setAttribute("data-id",bk.id);
+    row.appendChild(mk("bought",bk.bought||"","bk-cell bk-bought"));
+    row.appendChild(mk("title",bk.title||"","bk-cell bk-title"));
+    row.appendChild(mk("author",bk.author||"","bk-cell bk-author"));
+    let rating=document.createElement("div"); rating.className="bk-rating";
+    rating.appendChild(starWidget(bk,v=>{bk.rating=v; booksSave();}));
+    row.appendChild(rating);
+    row.appendChild(mk("comment",bk.comment||"","bk-cell bk-comment"));
+    let fin=document.createElement("div"); fin.className="bk-finished";
+    let cb=document.createElement("input"); cb.type="checkbox"; cb.className="bk-check";
+    cb.checked=(bk.finished===true||bk.finished==="Yes"||bk.finished==="yes"||bk.finished==="true"||bk.finished===1||bk.finished==="1");
+    cb.onchange=()=>{bk.finished=cb.checked; booksSave();};
+    fin.appendChild(cb); row.appendChild(fin);
+    let del=document.createElement("div"); del.className="bk-del";
+    let x=document.createElement("button"); x.className="rowdel"; x.title=t("delete"); x.textContent="×";
+    x.onclick=()=>{if(confirm(t("confirmDelBook"))){books=books.filter(o=>o.id!==bk.id); booksSave(); booksRender();}};
+    del.appendChild(x); row.appendChild(del);
+    tb.appendChild(row);
+  });
+  document.getElementById("bkEmpty").style.display=books.length?"none":"block";
+  tb.querySelectorAll(".bk-cell").forEach(el=>{
+    let saveT=null;
+    const save=()=>{
+      let row=el.closest(".bk-row"); if(!row) return;
+      let bk=books.find(o=>o.id===+row.getAttribute("data-id")); if(!bk) return;
+      bk[el.getAttribute("data-f")]=el.textContent.trim()?el.innerHTML:"";
+      booksSave();
+    };
+    el.addEventListener("input",()=>{clearTimeout(saveT); saveT=setTimeout(save,800);});
+    el.addEventListener("blur",()=>{clearTimeout(saveT); save();});
+  });
+}
+// ================= year review view =================
+let revY, revData;
+function revKey(){return "review-v1-"+revY;}
+function revLoad(){
+  try{revData=JSON.parse(localStorage.getItem(revKey()))||null;}catch(e){revData=null;}
+  if(!revData) revData={cols:["总结"],months:{},overall:""};
+  if(Array.isArray(revData.cols)&&revData.cols.length===2){
+    let m1={};
+    for(let m=1;m<=12;m++){
+      let row=(revData.months||{})[m];
+      if(Array.isArray(row)){let parts=row.filter(x=>x&&String(x).trim()); if(parts.length) m1[m]=parts.join("<br>");}
+    }
+    revData={cols:["总结"],months:m1,overall:revData.overall||""};
+  }
+  if(!Array.isArray(revData.cols)||!revData.cols.length) revData.cols=["总结"];
+}
+function revSave(){try{storeSet(revKey(),JSON.stringify(revData));}catch(e){}}
+function revRender(){
+  revLoad();
+  let tb=document.getElementById("revBody"); tb.innerHTML="";
+  for(let m=1;m<=12;m++){
+    let row=document.createElement("div"); row.className="rev-row";
+    let lab=document.createElement("div"); lab.className="rev-month"; lab.textContent=t("months")[m-1];
+    let cell=document.createElement("div"); cell.className="rev-cell"; cell.contentEditable="true";
+    cell.setAttribute("data-m",m);
+    cell.innerHTML=revData.months[m]||"";
+    row.appendChild(lab); row.appendChild(cell); tb.appendChild(row);
+  }
+  let rowO=document.createElement("div"); rowO.className="rev-row rev-row-overall";
+  let labO=document.createElement("div"); labO.className="rev-month"; labO.textContent=t("revOverall");
+  let cellO=document.createElement("div"); cellO.className="rev-cell"; cellO.contentEditable="true"; cellO.id="revOverallCell";
+  cellO.innerHTML=revData.overall||"";
+  rowO.appendChild(labO); rowO.appendChild(cellO); tb.appendChild(rowO);
+  const saveCell=el=>{
+    revLoad();
+    let v=el.textContent.trim()?el.innerHTML:"";
+    if(el.id==="revOverallCell"){revData.overall=v;}
+    else{revData.months[el.getAttribute("data-m")]=v;}
+    revSave();
+  };
+  tb.querySelectorAll(".rev-cell").forEach(el=>{
+    let saveT=null;
+    el.addEventListener("input",()=>{clearTimeout(saveT); saveT=setTimeout(()=>saveCell(el),800);});
+    el.addEventListener("blur",()=>{clearTimeout(saveT); saveCell(el);});
+  });
+  document.getElementById("revYearName").textContent=revY;
+  let ys=document.getElementById("revYearSel"); if(ys) ys.value=revY;
+}
+// =============== end book list + year review ===============
+
+// monthly plan wiring
+
+mpY=new Date().getFullYear(); mpM=new Date().getMonth()+1;
+
+
+document.getElementById("mpMonthInput").onchange=e=>{let v=e.target.value; if(!v) return; let [y,m]=v.split("-").map(Number); mpGoto(y,m);};
+document.getElementById("mpPrevM2").addEventListener("click",()=>{let y=mpY,m=mpM-1; if(m<1){m=12;y--;} mpGoto(y,m); window.scrollTo(0,0);});
+document.getElementById("mpNextM2").addEventListener("click",()=>{let y=mpY,m=mpM+1; if(m>12){m=1;y++;} mpGoto(y,m); window.scrollTo(0,0);});
+document.getElementById("mpTodayBtn").addEventListener("click",()=>{let n=new Date(); mpGoto(n.getFullYear(),n.getMonth()+1); window.scrollTo(0,0);});
+
+// book list wiring
+document.getElementById("bkAdd").addEventListener("click",()=>{
+  books.push({id:Date.now(),bought:"",title:"",author:"",rating:0,comment:"",finished:""});
+  booksSave(); booksRender();
+  let rows=document.querySelectorAll("#bkBody tr");
+  let last=rows[rows.length-1];
+  if(last){let c=last.querySelector('[data-f="title"]'); if(c) c.focus();}
+});
+// year review wiring
+
+revY=new Date().getFullYear();
+document.getElementById("revPrevY").onclick=()=>{revY--; revRender();};
+document.getElementById("revNextY").onclick=()=>{revY++; revRender();};
+document.getElementById("revYearSel").onchange=e=>{revY=+e.target.value; revRender();};
+
+let __appBooted=false;
+function bootApp(){
+  currentLang=localStorage.getItem("diary-lang")||"en-US";
+  if(!LANGS[currentLang]) currentLang="en-US";
+  markMode=localStorage.getItem("checkin-v1-markmode")||"heart";
+  loadCats(); renderCatOptions();
+  if(!__appBooted){
+    document.getElementById("date").value=todayLocal();
+    viewY=new Date().getFullYear(); viewM=new Date().getMonth()+1;
+    __appBooted=true;
+  }
+  loadHabits(); loadMonth();
+  applyLang(currentLang);
+  renderCatOptions(); load(); renderAll(); updatePager(); updateMonthPager(); setMarkMode(markMode); mpRender(); booksLoad(); booksRender(); revRender();
+}document.getElementById("langSelect").addEventListener("change",e=>{applyLang(e.target.value); renderCatOptions(); load(); renderAll(); mpRender(); booksRender(); revRender();});
+</script>
+<div class="month-pop" id="monthPop" style="display:none"><div class="cal-head"><button type="button" class="cal-nav" id="mpYPrev">‹</button><div class="cal-title" id="mpYTitle"></div><button type="button" class="cal-nav" id="mpYNext">›</button></div><div class="month-grid" id="monthGrid"></div></div>
+<div class="month-pop" id="yearPop" style="display:none"><div class="cal-title" style="text-align:center;margin-bottom:10px">Year</div><div class="month-grid" id="yearGrid"></div></div>
+<script>
+// index tabs: direct view switching (no animation)
+let currentView="view-daily";
+function switchView(id){
+  if(currentView===id) return;
+  document.getElementById(currentView).style.display="none";
+  document.getElementById(id).style.display="block";
+  currentView=id;
+  const VIEWS=["view-daily","view-checkin","view-monthly","view-books","view-review","view-settings"];
+  const TITLES={"view-daily":"titleDaily","view-checkin":"titleCheckin","view-monthly":"titleMonthly","view-books":"titleBooks","view-review":"titleReview","view-settings":"titleSettings"};
+  document.body.classList.remove("viewing-daily","viewing-checkin","viewing-monthly","viewing-books","viewing-review","view-settings");
+  document.body.classList.add("viewing-"+id.replace("view-",""));
+  document.querySelectorAll(".book-tab[data-view]").forEach(b=>{
+    b.classList.toggle("active",b.getAttribute("data-view")===id);
+  });
+  document.title=t(TITLES[id]||"titleDaily");
+  if(id==="view-monthly") mpRender();
+  if(id==="view-daily"&&typeof applyDayTheme==="function") applyDayTheme();
+  window.scrollTo(0,0);
+}
+document.querySelectorAll(".book-tab[data-view]").forEach(b=>{
+  b.addEventListener("click",()=>switchView(b.getAttribute("data-view")));
+});</script>
+<script>
+(function(){
+  "use strict";
+  var CFG_KEY = "diary-sync-config-v1";
+  var BAKED_URL = "https://obwmwwwoclzbbwsqofxc.supabase.co";
+  var BAKED_KEY = "sb_publishable_OyNO07iC42NPGfbjsRtv4g_GliSmq_e";
+  var sb = null;
+
+  function appPrefix(k){
+    if(!k) return false;
+    return /^(diary-v1-|checkin-v1-|books-v1-list$|diary-lang$|monthplan-v1-|review-v1-)/.test(k);
+  }
+
+  function hasBaked(){
+    return BAKED_URL && BAKED_URL.indexOf("__SUPABASE") === -1 &&
+           BAKED_KEY && BAKED_KEY.indexOf("__SUPABASE") === -1;
+  }
+
+  function getCfg(){
+    var stored = null;
+    try{ stored = JSON.parse(localStorage.getItem(CFG_KEY) || "null"); }catch(e){}
+    if(stored && stored.url && stored.key) return stored;
+    if(hasBaked()) return { url: BAKED_URL, key: BAKED_KEY };
+    return null;
+  }
+
+  function setCfg(c){ try{ localStorage.setItem(CFG_KEY, JSON.stringify(c)); }catch(e){} }
+
+  function show(panel){
+    var ov = document.getElementById("syncOverlay");
+    ov.style.display = "flex";
+    document.getElementById("cfgPanel").style.display = (panel === "cfg") ? "block" : "none";
+    document.getElementById("loginPanel").style.display = (panel === "login") ? "block" : "none";
+  }
+
+  function hide(){ document.getElementById("syncOverlay").style.display = "none"; }
+
+  function badge(state, text){
+    var b = document.getElementById("cloudBadge");
+    if(!b) return;
+    b.className = state || "";
+    b.style.display = "flex";
+    document.getElementById("cloudText").textContent = text || "";
+  }
+
+  function mkClient(){
+    var c = getCfg();
+    if(!c || !c.url || !c.key) return null;
+    if(typeof window.supabase === "undefined") return null;
+    if(!sb) sb = window.supabase.createClient(c.url, c.key);
+    return sb;
+  }
+
+  var pending = {}, timers = {};
+  window.__cloudUpsert = function(k, v){
+    if(!appPrefix(k)) return;
+    var c = mkClient();
+    if(!c) return;
+    pending[k] = v;
+    if(timers[k]) clearTimeout(timers[k]);
+    timers[k] = setTimeout(function(){
+      var val = pending[k];
+      delete pending[k]; delete timers[k];
+      pushOne(k, val);
+    }, 600);
+  };
+
+  function pushOne(k, v){
+    var c = mkClient();
+    if(!c) return;
+    c.auth.getUser().then(function(r){
+      if(!r || !r.data || !r.data.user) return;
+      c.from("kv").upsert({
+        user_id: r.data.user.id,
+        key: k,
+        value: v,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "user_id,key" }).then(function(res){
+        if(res && res.error){ badge("err", "同步失败"); }
+        else { badge("ok", "已同步"); }
+      }).catch(function(){ badge("err", "离线"); });
+    }).catch(function(){ badge("err", "离线"); });
+  }
+
+  function pullAll(){
+    var c = mkClient();
+    if(!c) return Promise.resolve(false);
+    return c.auth.getUser().then(function(r){
+      if(!r || !r.data || !r.data.user) return false;
+      var uid = r.data.user.id;
+      function page(from){
+        return c.from("kv").select("key,value").eq("user_id", uid)
+          .range(from, from + 999).then(function(res){
+            if(res.error) throw res.error;
+            var rows = res.data || [];
+            rows.forEach(function(row){
+              if(appPrefix(row.key)){
+                try{ localStorage.setItem(row.key, row.value); }catch(e){}
+              }
+            });
+            return rows.length;
+          });
+      }
+      var from = 0;
+      function loop(){
+        return page(from).then(function(n){
+          if(n >= 1000){ from += 1000; return loop(); }
+          return true;
+        });
+      }
+      return loop().catch(function(){ return false; });
+    }).catch(function(){ return false; });
+  }
+
+  function manualSync(){
+    badge("pending", "同步中…");
+    pullAll().then(function(ok){
+      if(ok){ if(window.bootApp) window.bootApp(); badge("ok", "已同步"); }
+      else badge("err", "同步失败");
+    });
+  }
+
+  function afterLogin(){
+    badge("pending", "同步中…");
+    pullAll().then(function(ok){
+      if(window.bootApp) window.bootApp();
+      hide();
+      if(ok) badge("ok", "已同步"); else badge("err", "离线");
+    });
+  }
+
+  function loginMode(mode){
+    var email = (document.getElementById("lgEmail").value || "").trim();
+    var pass = document.getElementById("lgPass").value || "";
+    var err = document.getElementById("lgErr");
+    err.textContent = "";
+    if(!email || !pass){ err.textContent = "请填写邮箱和密码"; return; }
+    if(pass.length < 6){ err.textContent = "密码至少 6 位"; return; }
+    var c = mkClient();
+    if(!c){ err.textContent = "连接配置有误"; show("cfg"); return; }
+    var p = (mode === "up")
+      ? c.auth.signUp({ email: email, password: pass })
+      : c.auth.signInWithPassword({ email: email, password: pass });
+    p.then(function(res){
+      if(res && res.error){ err.textContent = res.error.message || "出错了"; return; }
+      if(!res.data || !res.data.session){
+        err.textContent = "已发确认邮件，请去邮箱确认后再点登录。";
+        return;
+      }
+      afterLogin();
+    }).catch(function(){ err.textContent = "网络出错了"; });
+  }
+
+  function doLogout(){
+    var c = mkClient();
+    if(c){ try{ c.auth.signOut(); }catch(e){} }
+    sb = null;
+    badge("err", "未登录");
+    show("login");
+  }
+
+  function start(){
+    var c = mkClient();
+    if(!c){
+      if(typeof window.supabase === "undefined"){
+        document.getElementById("cfgErr").textContent = "加载云端组件失败，请检查网络后刷新。";
+      }
+      show("cfg");
+      return;
+    }
+    c.auth.getSession().then(function(res){
+      if(res && res.data && res.data.session){ afterLogin(); }
+      else { show("login"); }
+    }).catch(function(){ show("login"); });
+  }
+
+  function wire(){
+    if(window.storeSet){
+      var orig = window.storeSet;
+      window.storeSet = function(k, v){
+        var ok = orig(k, v);
+        if(ok){ try{ window.__cloudUpsert(k, v); }catch(e){} }
+        return ok;
+      };
+    }
+    document.getElementById("cfgSave").onclick = function(){
+      var url = (document.getElementById("cfgUrl").value || "").trim();
+      var key = (document.getElementById("cfgKey").value || "").trim();
+      var err = document.getElementById("cfgErr");
+      err.textContent = "";
+      if(!url || !key){ err.textContent = "两个都要填"; return; }
+      if(!/^https:\/\/.+\.supabase\.co\/?$/.test(url)){ err.textContent = "网址应像 https://xxxx.supabase.co"; return; }
+      setCfg({ url: url, key: key });
+      sb = null;
+      start();
+    };
+    document.getElementById("lgIn").onclick = function(){ loginMode("in"); };
+    document.getElementById("lgUp").onclick = function(){ loginMode("up"); };
+    document.getElementById("lgBack").onclick = function(){ show("cfg"); };
+    document.getElementById("cloudBadge").onclick = function(e){
+      if(e.target && e.target.id === "cloudOut"){ doLogout(); return; }
+      manualSync();
+    };
+  }
+
+  wire();
+  start();
+})();
+
+</script>
+</body>
+</html>
